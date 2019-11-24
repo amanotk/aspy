@@ -5,23 +5,15 @@
  $Id$
 """
 
+import pandas as pd
 import xarray as xr
 
-try:
-    import pytplot
-except:
-    pytplot = None
-
+from .utils import _cast_xarray
+from .utils import _process_kwargs
+from .utils import time_clip
 from .generate import generate_stack
 from .tplot2netcdf import save as ncsave
 from .tplot2netcdf import load as ncload
-
-
-def _process_kwargs(opt, kwargs, key, newkey=None):
-    if newkey is None:
-        newkey = key
-    if key in kwargs:
-        opt[key] = kwargs[key]
 
 
 def tplot(var, **kwargs):
@@ -36,3 +28,4 @@ def tplot(var, **kwargs):
     _process_kwargs(layout_opt, kwargs, 'height')
 
     return generate_stack(var, figure_opt, layout_opt)
+

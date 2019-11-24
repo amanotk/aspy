@@ -13,24 +13,13 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from .utils import _cast_xarray
 from .plyfigure import Figure1D, FigureSpec, FigureAlt, FigureMap
 
 try:
     import pytplot
 except:
     pytplot = None
-
-
-def _cast_xarray(var):
-    "cast input (scalar or sequence) into list of xarray's DataArray"
-    if isinstance(var, str) and pytplot is not None:
-        return list([pytplot.data_quants[var]])
-    elif isinstance(var, xr.DataArray):
-        return list([var])
-    elif hasattr(var, '__iter__'):
-        return list([_cast_xarray(v) for v in var])
-    else:
-        raise ValueError('Unrecognized input')
 
 
 def _get_figure_class(var):
