@@ -109,19 +109,21 @@ class Figure1D(BaseFigure):
         layout = self.figure.layout
         legend = list()
         for i in range(N):
-            # legend
+            # line options
             lopt = dict(line_width=1)
             if 'line_color' in popt['extras']:
                 lopt['line_color'] = \
                     _convert_color(popt['extras']['line_color'][i])
+            # legend
+            opt = dict(lopt, showlegend=False)
             if legend_names is not None:
                 xaxis = 'xaxis%d' % (self.row)
                 yaxis = 'yaxis%d' % (self.row)
                 xpos = layout[xaxis].domain[1] + 0.01
                 ypos = layout[yaxis].domain[1] - 0.02 - 0.04*i
                 legend.append(Legend(legend_names[i], lopt, xpos, ypos))
+                opt  = dict(opt, name=legend_names[i])
             # plot
-            opt  = dict(lopt, name=legend_names[i], showlegend=False)
             plot = go.Scatter(x=x, y=y[:,i], mode='lines', **opt)
             self.figure.add_trace(plot, row=self.row, col=self.col)
 

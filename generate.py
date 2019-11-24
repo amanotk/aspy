@@ -22,11 +22,11 @@ except:
 
 
 def _cast_xarray(var):
-    "cast input (scalar or sequence) into xarray's DataArray"
+    "cast input (scalar or sequence) into list of xarray's DataArray"
     if isinstance(var, str) and pytplot is not None:
-        return pytplot.data_quants[var]
+        return list([pytplot.data_quants[var]])
     elif isinstance(var, xr.DataArray):
-        return var
+        return list([var])
     elif hasattr(var, '__iter__'):
         return list([_cast_xarray(v) for v in var])
     else:
