@@ -64,12 +64,17 @@ class Legend(object):
 
 
 class BaseFigure(object):
-    def __init__(self, data, figure, row, col):
+    def __init__(self, data, figure, row, col, **options):
         self.data   = data
         self.figure = figure
         self.row    = row
         self.col    = col
+        self.webgl  = False
         self.setup_default_axes()
+        self.setup_options(options)
+
+    def setup_options(self, options):
+        self.webgl = options.get('use_webgl', False)
 
     def setup_default_axes(self):
         xaxis = dict(
@@ -95,6 +100,12 @@ class BaseFigure(object):
 
 class Figure1D(BaseFigure):
     def buildfigure(self):
+        # use WebGL version or not
+        if self.webgl:
+            scatter = go.Scattergl
+        else:
+            scatter = go.Scatter
+
         data = self.data
         popt = data.attrs['plot_options']
         x = pd.to_datetime(data.time, unit='s')
@@ -124,7 +135,7 @@ class Figure1D(BaseFigure):
                 legend.append(Legend(legend_names[i], lopt, xpos, ypos))
                 opt  = dict(opt, name=legend_names[i])
             # plot
-            plot = go.Scatter(x=x, y=y[:,i], mode='lines', **opt)
+            plot = scatter(x=x, y=y[:,i], mode='lines', **opt)
             self.figure.add_trace(plot, row=self.row, col=self.col)
 
         # update axes

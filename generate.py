@@ -14,6 +14,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from .utils import _cast_xarray
+from .utils import _cast_list
 from .plyfigure import Figure1D, FigureSpec, FigureAlt, FigureMap
 
 try:
@@ -37,12 +38,12 @@ def _get_figure_class(var):
     return cls
 
 
-def generate_stack(var, figure=None, layout=None):
+def generate_stack(var, figure=None, layout=None, options=None):
     if figure is None:
         figure = dict()
     if layout is None:
         layout = dict()
-    var = _cast_xarray(var)
+    var = _cast_list(_cast_xarray(var))
     num_plots = len(var)
 
     figure = make_subplots(rows=num_plots, cols=1, **figure)
@@ -51,7 +52,7 @@ def generate_stack(var, figure=None, layout=None):
     for j in range(num_plots):
         if isinstance(var[j], xr.DataArray):
             cls = _get_figure_class(var[j])
-            plt = cls(var[j], figure, j+1, 1)
+            plt = cls(var[j], figure, j+1, 1, **options)
             plt.buildfigure()
         elif hasattr(var[j], '__iter__'):
             data = var[j]

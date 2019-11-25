@@ -27,5 +27,5 @@ def tplot(var, **kwargs):
     _process_kwargs(layout_opt, kwargs, 'width')
     _process_kwargs(layout_opt, kwargs, 'height')
 
-    return generate_stack(var, figure_opt, layout_opt)
+    return generate_stack(var, figure_opt, layout_opt, kwargs)
 

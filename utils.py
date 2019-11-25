@@ -15,7 +15,7 @@ except:
 
 
 def _cast_xarray(var):
-    "cast input (scalar or sequence) into list of xarray's DataArray"
+    "cast input (scalar or sequence) into xarray's DataArray"
     if isinstance(var, str) and pytplot is not None:
         return pytplot.data_quants[var]
     elif isinstance(var, xr.DataArray):
@@ -24,6 +24,13 @@ def _cast_xarray(var):
         return list([_cast_xarray(v) for v in var])
     else:
         raise ValueError('Unrecognized input')
+
+
+def _cast_list(var):
+    if not isinstance(var, list):
+        return list([var])
+    else:
+        return var
 
 
 def _process_kwargs(opt, kwargs, key, newkey=None):
@@ -37,7 +44,7 @@ def time_clip(var, t1, t2):
     t1 = pd.Timestamp(t1).timestamp()
     t2 = pd.Timestamp(t2).timestamp()
 
-    var = _cast_xarray(var)
+    var = _cast_list(_cast_xarray(var))
     ret = [v.loc[t1:t2] for v in var]
     if len(ret) == 1:
         return ret[0]
