@@ -171,10 +171,15 @@ class FigureSpec(BaseFigure):
         ypad = 0
         cb = dict(x=xpos, y=ypos, len=ylen, ypad=ypad, yanchor='bottom',
                   title=popt['zaxis_opt']['axis_label'], titleside='right')
+        zmin, zmax = popt['zaxis_opt'].get('z_range', [None, None])
 
         # heatmap
-        opt = dict(name='', colorscale='viridis')
-        hm = go.Heatmap(z=z, x=x, y=y, colorbar=cb, **opt)
+        opt = dict(name='',
+                   colorscale='viridis',
+                   colorbar=cb,
+                   zmin=zmin,
+                   zmax=zmax)
+        hm = go.Heatmap(z=z, x=x, y=y, **opt)
         self.figure.add_trace(hm, row=self.row, col=self.col)
 
         # update axes

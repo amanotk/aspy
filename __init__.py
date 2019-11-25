@@ -9,7 +9,9 @@ import pandas as pd
 import xarray as xr
 
 from .utils import _cast_xarray
+from .utils import _cast_list
 from .utils import _process_kwargs
+from .utils import set_plot_options
 from .utils import time_clip
 from .generate import generate_stack
 from .tplot2netcdf import save as ncsave
