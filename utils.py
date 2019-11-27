@@ -16,6 +16,40 @@ except:
     pytplot = None
 
 
+_option_table = {
+    # x axis
+    'xlabel'        : ('xaxis_opt', 'axis_label', ),
+    'x_label'       : ('xaxis_opt', 'axis_label', ),
+    'xtype'         : ('xaxis_opt', 'x_axis_type', ),
+    'x_type'        : ('xaxis_opt', 'x_axis_type', ),
+    'xrange'        : ('xaxis_opt', 'x_range', ),
+    'x_range'       : ('xaxis_opt', 'x_range', ),
+    # y axis
+     'ylabel'        : ('yaxis_opt', 'axis_label', ),
+    'y_label'       : ('yaxis_opt', 'axis_label', ),
+    'ytype'         : ('yaxis_opt', 'y_axis_type', ),
+    'y_type'        : ('yaxis_opt', 'y_axis_type', ),
+    'yrange'        : ('yaxis_opt', 'y_range', ),
+    'y_range'       : ('yaxis_opt', 'y_range', ),
+    'legend'        : ('yaxis_opt', 'legend_names', ),
+    # z axis
+    'zlabel'        : ('zaxis_opt', 'axis_label', ),
+    'z_label'       : ('zaxis_opt', 'axis_label', ),
+    'ztype'         : ('zaxis_opt', 'z_axis_type', ),
+    'z_type'        : ('zaxis_opt', 'z_axis_type', ),
+    'zrange'        : ('zaxis_opt', 'z_range', ),
+    'z_range'       : ('zaxis_opt', 'z_range', ),
+    # other
+    'trange'        : ('trange', ),
+    't_range'       : ('trange', ),
+    'fontsize'      : ('extras', 'char_size', ),
+    'char_size'     : ('extras', 'char_size', ),
+    'linecolor'     : ('extras', 'line_color', ),
+    'line_color'    : ('extras', 'line_color', ),
+    'colormap'      : ('extras', 'colormap', ),
+}
+
+
 def _cast_xarray(var):
     "cast input (scalar or sequence) into xarray's DataArray"
     if isinstance(var, str) and pytplot is not None:
@@ -43,31 +77,7 @@ def _process_kwargs(opt, kwargs, key, newkey=None):
 
 
 def set_plot_options(data, **kwargs):
-    option_table = {
-        # x axis
-        'xlabel'        : ('xaxis_opt', 'axis_label', ),
-        'x_label'       : ('xaxis_opt', 'axis_label', ),
-        'x_type'        : ('xaxis_opt', 'x_axis_type', ),
-        'x_range'       : ('xaxis_opt', 'x_range', ),
-        # y axis
-        'ylabel'        : ('yaxis_opt', 'axis_label', ),
-        'y_label'       : ('yaxis_opt', 'axis_label', ),
-        'y_type'        : ('yaxis_opt', 'y_axis_type', ),
-        'y_range'       : ('yaxis_opt', 'y_range', ),
-        'legend'        : ('yaxis_opt', 'legend_names', ),
-        # z axis
-        'zlabel'        : ('zaxis_opt', 'axis_label', ),
-        'z_label'       : ('zaxis_opt', 'axis_label', ),
-        'z_type'        : ('zaxis_opt', 'z_axis_type', ),
-        'z_range'       : ('zaxis_opt', 'z_range', ),
-        # other
-        'trange'        : ('trange', ),
-        't_range'       : ('trange', ),
-        'fontsize'      : ('extras', 'char_size', ),
-        'char_size'     : ('extras', 'char_size', ),
-        'linecolor'     : ('extras', 'line_color', ),
-        'line_color'    : ('extras', 'line_color', ),
-    }
+    option_table = _option_table
     option_keys = option_table.keys()
 
     # check
@@ -88,6 +98,29 @@ def set_plot_options(data, **kwargs):
                 raise warnings.warn('Error in setting option : %s' % (key))
         else:
             pass
+
+
+def get_plot_options(data, key, val=None):
+    option_table = _option_table
+    option_keys = option_table.keys()
+
+    # check
+    plot_options = data.attrs.get('plot_options', None)
+    if plot_options is None:
+        raise ValueError('Invalid input DataArray')
+
+    # set options
+    if key in option_keys:
+        try:
+            table  = option_table[key]
+            option = plot_options
+            for i in range(len(table)-1):
+                option = option.get(table[i])
+            return option[table[-1]]
+        except:
+            raise warnings.warn('Error in getting option : %s' % (key))
+    else:
+        return val
 
 
 def time_clip(var, t1, t2):

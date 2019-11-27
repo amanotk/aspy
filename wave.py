@@ -14,6 +14,35 @@ import xarray as xr
 import pandas as pd
 
 from insitu import _cast_list
+from insitu import set_plot_options
+
+
+def _default_attrs_spectrogram():
+    default_attrs = {
+        'plot_options' : {
+            'xaxis_opt' : {
+                'axis_label' : 'Time',
+                'x_axis_type' : 'linear',
+            },
+            'yaxis_opt' : {
+                'axis_label' : 'Freq [Hz]',
+                'y_axis_type' : 'log',
+                'y_range' : [0.0, 1.0],
+            },
+            'zaxis_opt' : {
+                'axis_label' : '',
+                'z_axis_type' : 'linear',
+            },
+            'trange' : [0.0, 1.0],
+            'extras' : {
+                'spec' : True,
+                'colormap' : ['viridis'],
+                'panel_size' : 1,
+                'char_size' : 10,
+            },
+        },
+    }
+    return default_attrs
 
 
 def get_mfa_unit_vector(bx, by, bz):
@@ -160,11 +189,11 @@ def spectrogram(x, fs, nperseg, noverlap=None, window='blackman'):
         t = t + x[0].time.values[0]
         s = s.transpose()
         f = np.repeat(f[np.newaxis,:], s.shape[0], axis=0)
-        bins = xr.DataArray(f, dims=('time', 'v'), coords={'time' : t})
+        bins = xr.DataArray(f, dims=('time', 'f'), coords={'time' : t})
 
         # DataArray
         args = {
-            'dims'   : ('time', 'v'),
+            'dims'   : ('time', 'f'),
             'coords' : {
                 'time' : t,
                 'spec_bins' : bins
@@ -173,29 +202,12 @@ def spectrogram(x, fs, nperseg, noverlap=None, window='blackman'):
         data = xr.DataArray(s, **args)
 
         # set attribute
-        data.attrs = {
-            'plot_options' : {
-                'xaxis_opt' : {
-                    'axis_label' : 'Time',
-                    'x_axis_type' : 'linear',
-                },
-                'yaxis_opt' : {
-                    'axis_label' : 'Frequency [Hz]',
-                    'y_axis_type' : 'log',
-                    'y_range' : [f[0], f[-1]],
-                },
-                'zaxis_opt' : {
-                    'axis_label' : 'PSD',
-                    'z_axis_type' : 'log',
-                },
-                'trange' : [t[0], t[-1]],
-                'extras' : {
-                    'spec' : True,
-                    'panel_size' : 1,
-                    'char_size' : 10,
-                },
-            },
-        }
+        data.attrs = _default_attrs_spectrogram()
+        set_plot_options(data,
+                         yrange=[f[0], f[-1]],
+                         trange=[t[0], t[-1]],
+                         z_type='log',
+                         colormap='viridis')
 
         return data
     else:
@@ -212,20 +224,20 @@ class SVD:
         self.sps_dcb  = 128
         self.nperseg  = self.sps_acb // 8
         self.noverlap = self.nperseg // 8
-        self.naverage = 32
         self.window   = np.blackman
         self.wsmooth  = np.blackman(7)
         # update attribute given by keyword arguments
         for key, item in kwargs.items():
             setattr(self, key, item)
 
-    def calc_mfa_coord(self, dcb, tt, navg):
-        # averaged magnetic field
-        bb = dcb.rolling(navg, center=True).mean()
-        bb = mms.reindex_interpolate(bb, tt)
-        bx = np.array(bb.x / bb.t)
-        by = np.array(bb.y / bb.t)
-        bz = np.array(bb.z / bb.t)
+    def calc_mfa_coord(self, dcb, tb):
+        # magnetic field averaged over bins
+        time = dcb.coords['time']
+        bb = dcb.groupby_bins(time, tb).mean().values
+        bt = np.sqrt(np.sum(bb[:,0:3]**2, axis=1))
+        bx = np.array(bb[:,0] / bt)
+        by = np.array(bb[:,1] / bt)
+        bz = np.array(bb[:,2] / bt)
         return get_mfa_unit_vector(bx, by, bz)
 
     def spectral_matrix(self, acb, dcb):
@@ -233,20 +245,17 @@ class SVD:
         convolve = ndimage.filters.convolve1d
         sps_acb  = float(self.sps_acb)
         sps_dcb  = float(self.sps_dcb)
-        delt_acb = 1.0 / sps_acb
-        delt_dcb = 1.0 / sps_dcb
         nperseg  = self.nperseg
         noverlap = self.noverlap
         nsegment = nperseg - noverlap
-        naverage = self.naverage
         nfreq    = nperseg // 2
         window   = self.window
         wsmooth  = self.wsmooth
         # data
-        nt = acb.index.size
-        bx = acb.x
-        by = acb.y
-        bz = acb.z
+        nt = acb.shape[0]
+        bx = acb.values[:,0]
+        by = acb.values[:,1]
+        bz = acb.values[:,2]
         ww = window(nperseg)
         ww = ww / ww.sum()
         mt = (nt - noverlap)//nsegment
@@ -255,12 +264,12 @@ class SVD:
         By = segmentalize(by, nperseg, noverlap) * ww[None,:]
         Bz = segmentalize(bz, nperseg, noverlap) * ww[None,:]
         # time and frequency coordinate
-        dt = pd.Timedelta(nsegment/sps_acb, unit='s')
-        t0 = acb.index[0] + 0.5*dt
-        tt = pd.TimedeltaIndex(np.arange(mt)*dt, unit='s') + t0
+        dt = nsegment / sps_acb
+        tb = acb.time[::nsegment].values # bin edges
+        tt = 0.5*(tb[+1:] + tb[:-1])     # bin center
         ff = np.arange(1, nfreq+1)/(nperseg/sps_acb)
         # coordinate transformation and FFT
-        e1, e2, e3 = self.calc_mfa_coord(dcb, tt, naverage)
+        e1, e2, e3 = self.calc_mfa_coord(dcb, tb)
         B1, B2, B3 = transform_vector(Bx, By, Bz, e1, e2, e3)
         B1 = fftpack.fft(B1, axis=-1)[:,1:nfreq+1].T
         B2 = fftpack.fft(B2, axis=-1)[:,1:nfreq+1].T
@@ -390,7 +399,7 @@ class SVD:
 
     def svd(self):
         # perform SVD only for valid data
-        S = self.S
+        S = self.ss
         N, M, _, _ = S.shape
         T = S.reshape(N*M, 6, 3)
         I = np.argwhere(np.isfinite(np.sum(T, axis=(-2, -1))))[:,0]
@@ -402,82 +411,120 @@ class SVD:
         self.W = WW.reshape(N, M, 3)
         self.V = VV.reshape(N, M, 3, 3)
 
-    def get(self, *args):
+    def _process_svd_result(self, *args):
         trace = lambda x: np.trace(x, axis1=2, axis2=3)
-        SS = self.S[...,0:3,0:3] + self.S[...,3:6,0:3]*1j
-        S  = self.S
+        SS = self.ss[...,0:3,0:3] + self.ss[...,3:6,0:3]*1j
+        S  = self.ss
         U  = self.U
         W  = self.W
         V  = self.V
         r  = dict()
-        # power spectral density
-        if 'psd' in args:
-            psd = trace(np.abs(SS))
-            r['psd'] = psd
-        # degree of polarization
-        if 'pol' in args or 'degpol' in args:
-            pol = 1.5*(trace(np.matmul(SS,SS))/trace(SS)**2).real - 0.5
-            r['pol'] = pol
-        # planarity
-        if 'pla' in args or 'planarity' in args:
-            pla = 1 - np.sqrt(W[...,2]/(W[...,0]+1.0e-32))
-            r['pla'] = pla
-        # elipticity
-        if 'elp' in args or 'elipticity' in args:
-            elp = W[...,1]/W[...,0] * np.sign(SS[...,0,1].imag)
-            r['elp'] = elp
-        # n vector
-        if 'n' in args or 'nvec' in args:
-            kx  = np.sign(V[...,2,2])*V[...,2,0]
-            ky  = np.sign(V[...,2,2])*V[...,2,1]
-            kz  = np.sign(V[...,2,2])*V[...,2,2]
-            tkb = np.rad2deg(np.abs(np.arctan2(np.sqrt(kx**2 + ky**2), kz)))
-            pkb = np.rad2deg(np.arctan2(ky, kx))
-            r['tkb'] = tkb
-            r['pkb'] = pkb
+
+        eps = 1.0e-34
+
+        ### power spectral density
+        r['psd'] = trace(np.abs(SS))
+
+        ### degree of polarization
+        r['degpol'] = 1.5*(trace(np.matmul(SS,SS))/(trace(SS)**2+eps)).real - 0.5
+
+        ### planarity
+        r['planarity'] = 1 - np.sqrt(W[...,2]/(W[...,0]+eps))
+
+        ### ellipticity
+        r['ellipticity'] = W[...,1]/(W[...,0]+eps) * np.sign(SS[...,0,1].imag)
+
+        ### k vector
+        kx  = np.sign(V[...,2,2])*V[...,2,0]
+        ky  = np.sign(V[...,2,2])*V[...,2,1]
+        kz  = np.sign(V[...,2,2])*V[...,2,2]
+        kk  = np.sqrt(kx**2 + ky**2 + kz**2)
+        tkb = np.rad2deg(np.abs(np.arctan2(np.sqrt(kx**2 + ky**2), kz)))
+        pkb = np.rad2deg(np.arctan2(ky, kx))
+        r['nx']       = kx / kk
+        r['ny']       = ky / kk
+        r['nz']       = kz / kk
+        r['theta_kb'] = tkb
+        r['phi_kb']   = pkb
+
         return r
+
+    def _setup_arrays(self, tt, ff, result):
+        default_args = {
+            'dims'   : ('time', 'f'),
+            'coords' : {
+                'time' : tt,
+                'spec_bins' : ('f', ff),
+            },
+        }
+
+        # construct DataArray and store in dict
+        dadict = dict()
+        for key in result.keys():
+            data = xr.DataArray(result[key].transpose(), **default_args)
+            data.attrs = _default_attrs_spectrogram()
+            set_plot_options(data,
+                             yrange=[ff[0], ff[-1]],
+                             trange=[tt[0], tt[-1]])
+            dadict[key] = data
+
+        # power spectral density
+        set_plot_options(dadict['psd'],
+                         zlabel='PSD [nT^2/Hz]',
+                         zrange=[-5.0, +2.0],
+                         colormap='jet',
+                         ztype='log')
+
+        # degree of polarization
+        set_plot_options(dadict['degpol'],
+                         zlabel='Deg. Pol',
+                         zrange=[0.0, +1.0],
+                         colormap='greens')
+
+        # planarity
+        set_plot_options(dadict['planarity'],
+                         zlabel='Planarity',
+                         zrange=[0.0, +1.0],
+                         colormap='greens')
+
+        # ellipticity
+        set_plot_options(dadict['ellipticity'],
+                         zlabel='Ellipticity',
+                         zrange=[-1.0, +1.0],
+                         colormap='bwr')
+
+        # k vector
+        for nn in ('nx', 'ny', 'nz'):
+            set_plot_options(dadict[nn],
+                             zlabel=nn,
+                             zrange=[-1, +1])
+        set_plot_options(dadict['theta_kb'],
+                         zlabel='theta_kb',
+                         zrange=[0.0, 90.0],
+                         colormap='bwr')
+        set_plot_options(dadict['phi_kb'],
+                         zlabel='phi_kb',
+                         zrange=[0.0, 180.0],
+                         colormap='bwr')
+
+        return dadict
 
     def analyze(self, acb, dcb):
         # polarization analysis via SVD for spectral matrix
-        tt, ff, S = self.spectral_matrix(acb, dcb)
+        tt, ff, ss = self.spectral_matrix(acb, dcb)
         self.tt = tt
         self.ff = ff
-        self.S  = S
+        self.ss = ss
         self.svd()
-        result = self.get('psd', 'pol', 'pla', 'elp', 'n')
-        # apply smoothing
-        keys = ('psd', 'pol', 'pla', 'elp', 'tkb', 'pkb')
-        data = tuple([result[key] for key in keys])
-        data = self.smooth_result(data)
-        # power spectral density
-        spec_psd = tseries.Spectrogram(tt, ff, data[0], log=True, logy=True)
-        spec_psd.set(vmin=-6, vmax=+2, cmap=mms.cm_jet,
-                     ylabel='Freq. [Hz]', clabel=r'PSD [nT $^2$ / Hz]')
-        # degree of polarization
-        spec_pol = tseries.Spectrogram(tt, ff, data[1], log=False, logy=True)
-        spec_pol.set(vmin=0, vmax=+1, cmap=mms.cm_jet,
-                     ylabel='Freq. [Hz]', clabel='Deg. Pol.')
-        # planarity
-        spec_pla = tseries.Spectrogram(tt, ff, data[2], log=False, logy=True)
-        spec_pla.set(vmin=0, vmax=+1, cmap=mms.cm_jet,
-                     ylabel='Freq. [Hz]', clabel='Planarity')
-        # elipticity
-        spec_elp = tseries.Spectrogram(tt, ff, data[3], log=False, logy=True)
-        spec_elp.set(vmin=-1, vmax=+1, cmap=mms.cm_b2r,
-                     ylabel='Freq. [Hz]', clabel='Elipticity')
-        # theta
-        spec_tkb = tseries.Spectrogram(tt, ff, data[4], log=False, logy=True)
-        spec_tkb.set(vmin=0, vmax=90, cmap=mms.cm_jet,
-                     ylabel='Freq. [Hz]', clabel=r'$\theta_{kb}$')
-        # phi
-        spec_pkb = tseries.Spectrogram(tt, ff, data[5], log=False, logy=True)
-        spec_pkb.set(vmin=0, vmax=180, cmap=mms.cm_jet,
-                     ylabel='Freq. [Hz]', clabel=r'$\phi_{kb}$')
-        return spec_psd, spec_pol, spec_pla, spec_elp, spec_tkb, spec_pkb
+
+        # post process
+        result = self._process_svd_result()
+        dadict = self._setup_arrays(tt, ff, result)
+
+        return dadict
 
     def smooth_result(self, xx):
         convolve = ndimage.filters.convolve1d
         ws  = self.wsmooth / self.wsmooth.sum()
         return tuple([convolve(x, ws, mode='nearest') for x in xx])
-
 
