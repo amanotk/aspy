@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-""" frequency filtering tools
+""" Frequency filtering tools
 
 """
 
@@ -27,7 +27,7 @@ def apply_filter(b, a, data):
 
 
 def bandpass(x, flc, fhc, fs, order=5):
-    """Apply bandpass filter of Butterworth
+    """apply bandpass filter of Butterworth
 
     Parameters
     ----------
@@ -52,7 +52,7 @@ def bandpass(x, flc, fhc, fs, order=5):
 
 
 def highpass(x, fc, fs, order=5):
-    """Apply highpass filter of Butterworth
+    """apply highpass filter of Butterworth
 
     Parameters
     ----------
@@ -75,7 +75,7 @@ def highpass(x, fc, fs, order=5):
 
 
 def lowpass(x, fc, fs, order=5):
-    """Apply lowpass filter of Butterworth
+    """apply lowpass filter of Butterworth
 
     Parameters
     ----------

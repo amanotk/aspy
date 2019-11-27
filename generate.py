@@ -2,7 +2,6 @@
 
 """ Generate stack of plots
 
- $Id$
 """
 
 import re

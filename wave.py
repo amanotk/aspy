@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-""" wave analysis tools
+""" Wave analysis tools
 
 """
 

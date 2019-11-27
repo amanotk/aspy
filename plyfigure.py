@@ -2,7 +2,6 @@
 
 """ Figures for plotly
 
- $Id$
 """
 
 import re

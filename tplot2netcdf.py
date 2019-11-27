@@ -2,9 +2,9 @@
 
 """ tplot2netcdf
 
- $Id$
 """
 
+import os
 import pickle
 import base64
 import xarray as xr
@@ -35,26 +35,33 @@ def _get_encoded_xarray(da):
     return temp
 
 
-def save(tplotvars, filename, verbose=True):
+def save(tplotvars, filename, replace=False, verbose=True):
     if not isinstance(tplotvars, list):
         tplotvars = list([tplotvars])
+
+    # mode
+    if not os.path.exists(filename) or replace:
+        mode = 'w'
+    else:
+        mode = 'a'
 
     # save for each variables
     for var in tplotvars:
         if isinstance(var, str) and pytplot is not None:
             temp = _get_encoded_xarray(pytplot.get_data(var, xarray=True))
-        elif isinstrance(var, xr.DataArray):
+        elif isinstance(var, xr.DataArray):
             temp = _get_encoded_xarray(var)
         else:
             raise ValueError('Unknown input variables : ', var)
         # write to disk
-        temp.to_netcdf(filename, group=temp.name, mode='a')
+        temp.to_netcdf(filename, group=temp.name, mode=mode)
+        mode = 'a'
 
         if verbose:
             print('DataArray %s was saved to %s ...' % (temp.name, filename))
 
 
-def load(filename, tplot=False, verbose=True):
+def load(filename, tplot=True, verbose=True):
     # get list of groups
     import netCDF4
     with netCDF4.Dataset(filename) as nc:

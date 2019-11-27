@@ -2,7 +2,6 @@
 
 """ Utilities
 
- $Id$
 """
 
 import warnings

@@ -2,7 +2,6 @@
 
 """ Tools for In-Situ Spacecraft Data Analysis
 
- $Id$
 """
 
 import pandas as pd
