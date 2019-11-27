@@ -226,7 +226,6 @@ class FigureSpec(BaseFigure):
         # colormap and range
         zmin, zmax = get_opt('zrange', [None, None])
         cmap = _get_colormap(get_opt('colormap'))
-        print(cmap)
 
         # heatmap
         opt = dict(name='',
