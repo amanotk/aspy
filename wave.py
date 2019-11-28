@@ -2,13 +2,16 @@
 
 """ Wave analysis tools
 
+References
+----------
+- Santolik et al., J. Geophys. Res., 107, 1444, 2002
+- Santolik et al., Rdaio Sci., 38(1), 1010, 2003
+- Santolik et al., J. Geophys. Res., 115, A00F13, 2010
 """
 
 import numpy as np
 import scipy as sp
-from scipy import signal
-from scipy import fftpack
-from scipy import ndimage
+from scipy import fftpack, signal, ndimage, constants
 
 import xarray as xr
 import pandas as pd
@@ -216,10 +219,11 @@ def spectrogram(x, fs, nperseg, noverlap=None, window='blackman'):
 
 
 class SVD:
-    """Magnetic SVD
+    """ Magnetic Singular Value Decomposition Method
+
     """
     def __init__(self, **kwargs):
-        self.sps_efd  = 8192
+        self.sps_ace  = 8192
         self.sps_acb  = 8192
         self.sps_dcb  = 128
         self.nperseg  = self.sps_acb // 8
@@ -318,88 +322,80 @@ class SVD:
         S[:,:,5,2] = 0
         return tt, ff, S
 
-    def poynting(self, efd, acb, dcb):
+    def poynting(self, ace, acb, dcb):
         # calculate Poynting vector
         convolve = ndimage.filters.convolve1d
-        sps_efd  = float(self.sps_efd)
+        sps_ace  = float(self.sps_ace)
         sps_acb  = float(self.sps_acb)
         sps_dcb  = float(self.sps_dcb)
-        delt_efd = 1.0 / sps_efd
-        delt_acb = 1.0 / sps_acb
-        delt_dcb = 1.0 / sps_dcb
         nperseg  = self.nperseg
         noverlap = self.noverlap
         nsegment = nperseg - noverlap
-        naverage = self.naverage
         nfreq    = nperseg // 2
         window   = self.window
         wsmooth  = self.wsmooth
         # data size and window
-        nt = acb.index.size
+        nt = acb.shape[0]
+        bx = acb.values[:,0]
+        by = acb.values[:,1]
+        bz = acb.values[:,2]
         ww = window(nperseg)
         ww = ww / ww.sum()
         mt = (nt - noverlap)//nsegment
+        # interpolate electric field
+        ef = ace.interp(time=acb.time)
+        ex = ef.values[:,0]
+        ey = ef.values[:,1]
+        ez = ef.values[:,2]
         # segmentalize
-        Ex = segmentalize(efd.x, nperseg, noverlap) * ww[None,:]
-        Ey = segmentalize(efd.y, nperseg, noverlap) * ww[None,:]
-        Ez = segmentalize(efd.z, nperseg, noverlap) * ww[None,:]
-        Bx = segmentalize(acb.x, nperseg, noverlap) * ww[None,:]
-        By = segmentalize(acb.y, nperseg, noverlap) * ww[None,:]
-        Bz = segmentalize(acb.z, nperseg, noverlap) * ww[None,:]
+        Ex = segmentalize(ex, nperseg, noverlap) * ww[None,:]
+        Ey = segmentalize(ey, nperseg, noverlap) * ww[None,:]
+        Ez = segmentalize(ez, nperseg, noverlap) * ww[None,:]
+        Bx = segmentalize(bx, nperseg, noverlap) * ww[None,:]
+        By = segmentalize(by, nperseg, noverlap) * ww[None,:]
+        Bz = segmentalize(bz, nperseg, noverlap) * ww[None,:]
         # time and frequency coordinate
-        dt = pd.Timedelta(nsegment/sps_acb, unit='s')
-        t0 = acb.index[0] + 0.5*dt
-        tt = pd.TimedeltaIndex(np.arange(mt)*dt, unit='s') + t0
+        dt = nsegment / sps_acb
+        tb = acb.time[::nsegment].values # bin edges
+        tt = 0.5*(tb[+1:] + tb[:-1])     # bin center
         ff = np.arange(1, nfreq+1)/(nperseg/sps_acb)
+        # coordinate transformation and FFT
+        e1, e2, e3 = self.calc_mfa_coord(dcb, tb)
+        E1, E2, E3 = transform_vector(Ex, Ey, Ez, e1, e2, e3)
+        B1, B2, B3 = transform_vector(Bx, By, Bz, e1, e2, e3)
         # FFT
-        Ex = fftpack.fft(Ex, axis=-1)[:,1:nfreq+1]
-        Ey = fftpack.fft(Ey, axis=-1)[:,1:nfreq+1]
-        Ez = fftpack.fft(Ez, axis=-1)[:,1:nfreq+1]
-        Bx = fftpack.fft(Bx, axis=-1)[:,1:nfreq+1]
-        By = fftpack.fft(By, axis=-1)[:,1:nfreq+1]
-        Bz = fftpack.fft(Bz, axis=-1)[:,1:nfreq+1]
+        E1 = fftpack.fft(E1, axis=-1)[:,1:nfreq+1].T
+        E2 = fftpack.fft(E2, axis=-1)[:,1:nfreq+1].T
+        E3 = fftpack.fft(E3, axis=-1)[:,1:nfreq+1].T
+        B1 = fftpack.fft(B1, axis=-1)[:,1:nfreq+1].T
+        B2 = fftpack.fft(B2, axis=-1)[:,1:nfreq+1].T
+        B3 = fftpack.fft(B3, axis=-1)[:,1:nfreq+1].T
         # calculate Poynting flux from cross spectral matrix
         ws  = wsmooth / wsmooth.sum()
-        Sx1 = convolve((Ey * np.conj(Bz)).real, ws, mode='nearest')
-        Sx2 = convolve((Ez * np.conj(By)).real, ws, mode='nearest')
-        Sy1 = convolve((Ez * np.conj(Bx)).real, ws, mode='nearest')
-        Sy2 = convolve((Ex * np.conj(Bz)).real, ws, mode='nearest')
-        Sz1 = convolve((Ex * np.conj(By)).real, ws, mode='nearest')
-        Sz2 = convolve((Ey * np.conj(Bx)).real, ws, mode='nearest')
+        S1  = (E2 * np.conj(B3) - E3 * np.conj(B2)).real
+        S2  = (E3 * np.conj(B1) - E1 * np.conj(B3)).real
+        S3  = (E1 * np.conj(B2) - E2 * np.conj(B1)).real
         # E [mV/m] * B [nT] => unit conversion factor = 1.0e-12
-        Sx  = (Sx1 - Sx2)/mms.mu0 * 1.0e-12
-        Sy  = (Sy1 - Sy2)/mms.mu0 * 1.0e-12
-        Sz  = (Sz1 - Sz2)/mms.mu0 * 1.0e-12
-        # coordinate transformation
-        e1, e2, e3 = self.calc_mfa_coord(dcb, tt, naverage)
-        S1, S2, S3 = vector_transform(Sx, Sy, Sz, e1, e2, e3)
-        S1 = S1.T
-        S2 = S2.T
-        S3 = S3.T
-        pfx = np.sqrt(S1**2 + S2**2 + S3**2)
-        tsb = np.rad2deg(np.abs(np.arctan2(np.sqrt(S1**2 + S2**2), S3)))
-        psb = np.rad2deg(np.arctan2(S2, S1))
-        pfx, tsb, psd = self.smooth_result((pfx, tsb, psb))
-        # magnitude
-        spec_pfx = tseries.Spectrogram(tt, ff, pfx, log=True, logy=True)
-        spec_pfx.set(vmin=-12, vmax=-4, cmap=mms.cm_jet,
-                     ylabel='Freq. [Hz]',
-                     clabel=r'Poynting Flux [W/Hz/m$^2$/s]')
-        # theta
-        spec_tsb = tseries.Spectrogram(tt, ff, tsb, log=False, logy=True)
-        spec_tsb.set(vmin=0, vmax=180, cmap=mms.cm_b2r,
-                     ylabel='Freq. [Hz]',
-                     clabel=r'$\theta_{sb}$')
-        # phi
-        spec_psb = tseries.Spectrogram(tt, ff, psb, log=False, logy=True)
-        spec_psb.set(vmin=0, vmax=180, cmap=mms.cm_none,
-                     ylabel='Freq. [Hz]',
-                     clabel=r'$\phi_{sb}$')
-        return spec_pfx, spec_tsb, spec_psb
+        mu0 = constants.mu_0
+        s1  = convolve(S1, ws, mode='nearest') / mu0 * 1.0e-12
+        s2  = convolve(S2, ws, mode='nearest') / mu0 * 1.0e-12
+        s3  = convolve(S3, ws, mode='nearest') / mu0 * 1.0e-12
+        ss  = np.sqrt(S1**2 + S2**2 + S3**2)
+        tsb = np.rad2deg(np.abs(np.arctan2(np.sqrt(s1**2 + s2**2), s3)))
+        psb = np.rad2deg(np.arctan2(s2, s1))
+        # store result
+        r  = dict()
+        r['s1']       = s1 / ss
+        r['s2']       = s2 / ss
+        r['s3']       = s3 / ss
+        r['theta_sb'] = tsb
+        r['phi_sb']   = psb
+        return r
 
-    def svd(self):
+    def svd(self, acb, dcb):
+        # calculate spectral matrix
+        t, f, S = self.spectral_matrix(acb, dcb)
         # perform SVD only for valid data
-        S = self.ss
         N, M, _, _ = S.shape
         T = S.reshape(N*M, 6, 3)
         I = np.argwhere(np.isfinite(np.sum(T, axis=(-2, -1))))[:,0]
@@ -407,26 +403,24 @@ class SVD:
         WW = np.zeros((N*M, 3), np.float64)
         VV = np.zeros((N*M, 3, 3), np.float64)
         UU[I], WW[I], VV[I] = np.linalg.svd(T[I])
-        self.U = UU.reshape(N, M, 6, 6)
-        self.W = WW.reshape(N, M, 3)
-        self.V = VV.reshape(N, M, 3, 3)
+        U = UU.reshape(N, M, 6, 6)
+        W = WW.reshape(N, M, 3)
+        V = VV.reshape(N, M, 3, 3)
+        self.svd_result = dict(t=t, f=f, S=S, U=U, W=W, V=V)
+        return t, f, self._process_svd_result(S, U, W, V)
 
-    def _process_svd_result(self, *args):
-        trace = lambda x: np.trace(x, axis1=2, axis2=3)
-        SS = self.ss[...,0:3,0:3] + self.ss[...,3:6,0:3]*1j
-        S  = self.ss
-        U  = self.U
-        W  = self.W
-        V  = self.V
-        r  = dict()
-
+    def _process_svd_result(self, S, U, W, V):
         eps = 1.0e-34
+        Tr  = lambda x: np.trace(x, axis1=2, axis2=3)
+        SS  = S[...,0:3,0:3] + S[...,3:6,0:3]*1j
+
+        r = dict()
 
         ### power spectral density
-        r['psd'] = trace(np.abs(SS))
+        r['psd'] = Tr(np.abs(SS))
 
         ### degree of polarization
-        r['degpol'] = 1.5*(trace(np.matmul(SS,SS))/(trace(SS)**2+eps)).real - 0.5
+        r['degpol'] = 1.5*(Tr(np.matmul(SS,SS))/(Tr(SS)**2+eps)).real - 0.5
 
         ### planarity
         r['planarity'] = 1 - np.sqrt(W[...,2]/(W[...,0]+eps))
@@ -435,91 +429,126 @@ class SVD:
         r['ellipticity'] = W[...,1]/(W[...,0]+eps) * np.sign(SS[...,0,1].imag)
 
         ### k vector
-        kx  = np.sign(V[...,2,2])*V[...,2,0]
-        ky  = np.sign(V[...,2,2])*V[...,2,1]
-        kz  = np.sign(V[...,2,2])*V[...,2,2]
-        kk  = np.sqrt(kx**2 + ky**2 + kz**2)
-        tkb = np.rad2deg(np.abs(np.arctan2(np.sqrt(kx**2 + ky**2), kz)))
-        pkb = np.rad2deg(np.arctan2(ky, kx))
-        r['nx']       = kx / kk
-        r['ny']       = ky / kk
-        r['nz']       = kz / kk
+        k1  = np.sign(V[...,2,2])*V[...,2,0]
+        k2  = np.sign(V[...,2,2])*V[...,2,1]
+        k3  = np.sign(V[...,2,2])*V[...,2,2]
+        kk  = np.sqrt(k1**2 + k2**2 + k3**2)
+        tkb = np.rad2deg(np.abs(np.arctan2(np.sqrt(k1**2 + k2**2), k3)))
+        pkb = np.rad2deg(np.arctan2(k2, k1))
+        r['n1']       = k1 / kk
+        r['n2']       = k2 / kk
+        r['n3']       = k3 / kk
         r['theta_kb'] = tkb
         r['phi_kb']   = pkb
 
         return r
 
-    def _setup_arrays(self, tt, ff, result):
+    def _setup_arrays(self, t, f, result):
         default_args = {
             'dims'   : ('time', 'f'),
             'coords' : {
-                'time' : tt,
-                'spec_bins' : ('f', ff),
+                'time' : t,
+                'spec_bins' : ('f', f),
             },
         }
 
         # construct DataArray and store in dict
         dadict = dict()
         for key in result.keys():
-            data = xr.DataArray(result[key].transpose(), **default_args)
-            data.attrs = _default_attrs_spectrogram()
-            set_plot_options(data,
-                             yrange=[ff[0], ff[-1]],
-                             trange=[tt[0], tt[-1]])
-            dadict[key] = data
+            try:
+                data = xr.DataArray(result[key].transpose(), **default_args)
+                data.name = key
+                data.attrs = _default_attrs_spectrogram()
+                set_plot_options(data,
+                                 yrange=[f[0], f[-1]],
+                                 trange=[t[0], t[-1]])
+                dadict[key] = data
+            except Exception as e:
+                print('Error in creating spectrogram for : %s' % (key))
+                print(e)
 
         # power spectral density
-        set_plot_options(dadict['psd'],
-                         zlabel='PSD [nT^2/Hz]',
-                         zrange=[-5.0, +2.0],
-                         colormap='jet',
-                         ztype='log')
+        if 'psd' in dadict:
+            zmax = np.ceil(np.log10(np.max(dadict['psd'])))
+            zmin = zmax - 7
+            set_plot_options(dadict['psd'],
+                             zlabel='log10(PSD [nT^2/Hz])',
+                             zrange=[zmin, zmax],
+                             colormap='jet',
+                             ztype='log')
 
         # degree of polarization
-        set_plot_options(dadict['degpol'],
-                         zlabel='Deg. Pol',
-                         zrange=[0.0, +1.0],
-                         colormap='greens')
+        if 'degpol' in dadict:
+            set_plot_options(dadict['degpol'],
+                             zlabel='Deg. Pol',
+                             zrange=[0.0, +1.0],
+                             colormap='greens')
 
         # planarity
-        set_plot_options(dadict['planarity'],
-                         zlabel='Planarity',
-                         zrange=[0.0, +1.0],
-                         colormap='greens')
+        if 'planarity' in dadict:
+            set_plot_options(dadict['planarity'],
+                             zlabel='Planarity',
+                             zrange=[0.0, +1.0],
+                             colormap='greens')
 
         # ellipticity
-        set_plot_options(dadict['ellipticity'],
-                         zlabel='Ellipticity',
-                         zrange=[-1.0, +1.0],
-                         colormap='bwr')
+        if 'ellipticity' in dadict:
+            set_plot_options(dadict['ellipticity'],
+                             zlabel='Ellipticity',
+                             zrange=[-1.0, +1.0],
+                             colormap='bwr')
 
         # k vector
-        for nn in ('nx', 'ny', 'nz'):
-            set_plot_options(dadict[nn],
-                             zlabel=nn,
-                             zrange=[-1, +1])
-        set_plot_options(dadict['theta_kb'],
-                         zlabel='theta_kb',
-                         zrange=[0.0, 90.0],
-                         colormap='bwr')
-        set_plot_options(dadict['phi_kb'],
-                         zlabel='phi_kb',
-                         zrange=[0.0, 180.0],
-                         colormap='bwr')
+        for nn in ('n1', 'n2', 'n3'):
+            if nn in dadict:
+                set_plot_options(dadict[nn],
+                                 zlabel=nn,
+                                 zrange=[-1, +1],
+                                 colormap='bwr')
+
+        if 'theta_kb' in dadict:
+            set_plot_options(dadict['theta_kb'],
+                             zlabel='theta_kb',
+                             zrange=[0.0, 90.0],
+                             colormap='bwr')
+
+        if 'phi_kb' in dadict:
+            set_plot_options(dadict['phi_kb'],
+                             zlabel='phi_kb',
+                             zrange=[0.0, 180.0],
+                             colormap='bwr')
+
+        # poynting flux
+        for ss in ('s1', 's2', 's3'):
+            if ss in dadict:
+                set_plot_options(dadict[ss],
+                                 zlabel=ss,
+                                 zrange=[-1, +1],
+                                 colormap='bwr')
+
+        if 'theta_sb' in dadict:
+            set_plot_options(dadict['theta_sb'],
+                             zlabel='theta_sb',
+                             zrange=[0.0, 180.0],
+                             colormap='bwr')
+
+        if 'phi_sb' in dadict:
+            set_plot_options(dadict['phi_sb'],
+                             zlabel='phi_sb',
+                             zrange=[0.0, 180.0],
+                             colormap='bwr')
+
 
         return dadict
 
-    def analyze(self, acb, dcb):
-        # polarization analysis via SVD for spectral matrix
-        tt, ff, ss = self.spectral_matrix(acb, dcb)
-        self.tt = tt
-        self.ff = ff
-        self.ss = ss
-        self.svd()
+    def analyze(self, ace, acb, dcb):
+        t, f, result1 = self.svd(acb, dcb)
+        result2 = self.poynting(ace, acb, dcb)
 
-        # post process
-        result = self._process_svd_result()
-        dadict = self._setup_arrays(tt, ff, result)
+        result = dict()
+        result.update(result1)
+        result.update(result2)
+        dadict = self._setup_arrays(t, f, result)
 
         return dadict
 
