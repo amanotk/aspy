@@ -6,6 +6,7 @@
 
 import warnings
 
+import numpy as np
 import pandas as pd
 import xarray as xr
 
@@ -14,6 +15,18 @@ try:
 except:
     pytplot = None
 
+
+default_layout = {
+    'dpi'           : 144,
+    'width'         : 800,
+    'height'        : 800,
+    'vspace'        : 25,
+    'margin_top'    : 40,
+    'margin_bottom' : 80,
+    'margin_left'   : 100,
+    'margin_right'  : 140,
+    'fontsize'      : 16,
+}
 
 _option_table = {
     # x axis
@@ -24,7 +37,7 @@ _option_table = {
     'xrange'        : ('xaxis_opt', 'x_range', ),
     'x_range'       : ('xaxis_opt', 'x_range', ),
     # y axis
-     'ylabel'        : ('yaxis_opt', 'axis_label', ),
+    'ylabel'        : ('yaxis_opt', 'axis_label', ),
     'y_label'       : ('yaxis_opt', 'axis_label', ),
     'ytype'         : ('yaxis_opt', 'y_axis_type', ),
     'y_type'        : ('yaxis_opt', 'y_axis_type', ),
@@ -46,6 +59,7 @@ _option_table = {
     'linecolor'     : ('extras', 'line_color', ),
     'line_color'    : ('extras', 'line_color', ),
     'colormap'      : ('extras', 'colormap', ),
+    'panelsize'     : ('extras', 'panel_size',),
 }
 
 
@@ -75,7 +89,7 @@ def _process_kwargs(opt, kwargs, key, newkey=None):
         opt[key] = kwargs[key]
 
 
-def set_plot_options(data, **kwargs):
+def set_plot_option(data, **kwargs):
     option_table = _option_table
     option_keys = option_table.keys()
 
@@ -99,7 +113,7 @@ def set_plot_options(data, **kwargs):
             pass
 
 
-def get_plot_options(data, key, val=None):
+def get_plot_option(data, key, val=None):
     option_table = _option_table
     option_keys = option_table.keys()
 
@@ -122,6 +136,10 @@ def get_plot_options(data, key, val=None):
     return val
 
 
+def get_layout_option(kwargs, key):
+    return kwargs.get(key, default_layout[key])
+
+
 def get_figure_class(var, classdict):
     opt = var.attrs['plot_options'].get('extras')
 
@@ -135,6 +153,75 @@ def get_figure_class(var, classdict):
         cls = classdict.get('Line')
 
     return cls
+
+
+def get_figure_layout(var, **kwargs):
+    var = _cast_list(_cast_xarray(var))
+
+    # work in unit of pixels
+    fig_h = get_layout_option(kwargs, 'height')
+    fig_w = get_layout_option(kwargs, 'width')
+
+    # margin
+    margin_t = get_layout_option(kwargs, 'margin_top')
+    margin_b = get_layout_option(kwargs, 'margin_bottom')
+    margin_l = get_layout_option(kwargs, 'margin_left')
+    margin_r = get_layout_option(kwargs, 'margin_right')
+
+    # var_label
+    if 'var_label' in kwargs:
+        print('Warning: var_label functionality has not yet been implemented')
+
+    # get unit size for each panel in pixels
+    N  = len(var)
+    ps = np.array([get_plot_option(v, 'panelsize') for v in var])
+    vs = get_layout_option(kwargs, 'vspace')
+    ph = (fig_h - (margin_t + margin_b + vs*(N-1))) / N
+    pw = (fig_w - (margin_l + margin_r))
+    hh = ph * ps
+    ww = pw * np.ones((N,))
+    vv = vs * np.ones((N,))
+
+    # bounding box in pixels
+    x0 = np.zeros_like(hh)
+    x1 = np.zeros_like(hh)
+    y0 = np.zeros_like(hh)
+    y1 = np.zeros_like(hh)
+    x0[ : ] = margin_l
+    x1[ : ] = x0[:] + ww
+    y0[  0] = margin_b
+    y0[1:N] = y0[0] + np.cumsum(hh + vv)[0:N-1]
+    y1[ : ] = y0[:] + hh
+
+    # reverse order
+    x0 = x0[::-1]
+    x1 = x1[::-1]
+    y0 = y0[::-1]
+    y1 = y1[::-1]
+
+    bbox_pixels = {
+        'x0' : x0,
+        'x1' : x1,
+        'y0' : y0,
+        'y1' : y1,
+    }
+
+    bbox_relative = {
+        'x0' : x0 / fig_w,
+        'x1' : x1 / fig_w,
+        'y0' : y0 / fig_h,
+        'y1' : y1 / fig_h,
+    }
+
+    return bbox_pixels, bbox_relative
+
+
+def bbox_to_rect(bbox):
+    l = bbox['x0']
+    b = bbox['y0']
+    w = bbox['x1'] - bbox['x0']
+    h = bbox['y1'] - bbox['y0']
+    return l, b, w, h
 
 
 def time_clip(var, t1, t2):

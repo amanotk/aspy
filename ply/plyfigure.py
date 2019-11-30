@@ -10,7 +10,7 @@ import pandas as pd
 
 import plotly.graph_objects as go
 
-from ..utils import get_plot_options
+from ..utils import get_plot_option
 
 _mpl_jet = \
 [
@@ -144,7 +144,7 @@ class BaseFigure(object):
 
 class FigureLine(BaseFigure):
     def buildfigure(self):
-        get_opt = lambda key, val=None: get_plot_options(self.data, key, val)
+        get_opt = lambda key, val=None: get_plot_option(self.data, key, val)
         data = self.data
 
         # use WebGL version or not
@@ -206,7 +206,7 @@ class FigureLine(BaseFigure):
 
 class FigureSpec(BaseFigure):
     def buildfigure(self):
-        get_opt = lambda key, val=None: get_plot_options(self.data, key, val)
+        get_opt = lambda key, val=None: get_plot_option(self.data, key, val)
         data = self.data
 
         x = pd.to_datetime(data.time, unit='s')

@@ -17,7 +17,7 @@ import xarray as xr
 import pandas as pd
 
 from insitu import _cast_list
-from insitu import set_plot_options
+from insitu import set_plot_option
 
 
 def _default_attrs_spectrogram():
@@ -165,12 +165,12 @@ def spectrogram(x, fs, nperseg, noverlap=None, window='blackman'):
     """
     if noverlap is None:
         noverlap = nperseg // 2
-    args = {
-        'nperseg'  : nperseg,
-        'noverlap' : noverlap,
-        'fs'       : fs,
-        'window'   : window,
-    }
+        args = {
+            'nperseg'  : nperseg,
+            'noverlap' : noverlap,
+            'fs'       : fs,
+            'window'   : window,
+        }
 
     # calculate sum of all input
     x = _cast_list(x)
@@ -206,11 +206,11 @@ def spectrogram(x, fs, nperseg, noverlap=None, window='blackman'):
 
         # set attribute
         data.attrs = _default_attrs_spectrogram()
-        set_plot_options(data,
-                         yrange=[f[0], f[-1]],
-                         trange=[t[0], t[-1]],
-                         z_type='log',
-                         colormap='viridis')
+        set_plot_option(data,
+                        yrange=[f[0], f[-1]],
+                        trange=[t[0], t[-1]],
+                        z_type='log',
+                        colormap='viridis')
 
         return data
     else:
@@ -459,9 +459,9 @@ class SVD:
                 data = xr.DataArray(result[key].transpose(), **default_args)
                 data.name = key
                 data.attrs = _default_attrs_spectrogram()
-                set_plot_options(data,
-                                 yrange=[f[0], f[-1]],
-                                 trange=[t[0], t[-1]])
+                set_plot_option(data,
+                                yrange=[f[0], f[-1]],
+                                trange=[t[0], t[-1]])
                 dadict[key] = data
             except Exception as e:
                 print('Error in creating spectrogram for : %s' % (key))
@@ -471,72 +471,72 @@ class SVD:
         if 'psd' in dadict:
             zmax = np.ceil(np.log10(np.max(dadict['psd'])))
             zmin = zmax - 7
-            set_plot_options(dadict['psd'],
-                             zlabel='log10(PSD [nT^2/Hz])',
-                             zrange=[zmin, zmax],
-                             colormap='jet',
-                             ztype='log')
+            set_plot_option(dadict['psd'],
+                            zlabel='log10(PSD [nT^2/Hz])',
+                            zrange=[zmin, zmax],
+                            colormap='jet',
+                            ztype='log')
 
         # degree of polarization
         if 'degpol' in dadict:
-            set_plot_options(dadict['degpol'],
-                             zlabel='Deg. Pol',
-                             zrange=[0.0, +1.0],
-                             colormap='greens')
+            set_plot_option(dadict['degpol'],
+                            zlabel='Deg. Pol',
+                            zrange=[0.0, +1.0],
+                            colormap='greens')
 
         # planarity
         if 'planarity' in dadict:
-            set_plot_options(dadict['planarity'],
-                             zlabel='Planarity',
-                             zrange=[0.0, +1.0],
-                             colormap='greens')
+            set_plot_option(dadict['planarity'],
+                            zlabel='Planarity',
+                            zrange=[0.0, +1.0],
+                            colormap='greens')
 
         # ellipticity
         if 'ellipticity' in dadict:
-            set_plot_options(dadict['ellipticity'],
-                             zlabel='Ellipticity',
-                             zrange=[-1.0, +1.0],
-                             colormap='bwr')
+            set_plot_option(dadict['ellipticity'],
+                            zlabel='Ellipticity',
+                            zrange=[-1.0, +1.0],
+                            colormap='bwr')
 
         # k vector
         for nn in ('n1', 'n2', 'n3'):
             if nn in dadict:
-                set_plot_options(dadict[nn],
-                                 zlabel=nn,
-                                 zrange=[-1, +1],
-                                 colormap='bwr')
+                set_plot_option(dadict[nn],
+                                zlabel=nn,
+                                zrange=[-1, +1],
+                                colormap='bwr')
 
         if 'theta_kb' in dadict:
-            set_plot_options(dadict['theta_kb'],
-                             zlabel='theta_kb',
-                             zrange=[0.0, 90.0],
-                             colormap='bwr')
+            set_plot_option(dadict['theta_kb'],
+                            zlabel='theta_kb',
+                            zrange=[0.0, 90.0],
+                            colormap='bwr')
 
         if 'phi_kb' in dadict:
-            set_plot_options(dadict['phi_kb'],
-                             zlabel='phi_kb',
-                             zrange=[0.0, 180.0],
-                             colormap='bwr')
+            set_plot_option(dadict['phi_kb'],
+                            zlabel='phi_kb',
+                            zrange=[0.0, 180.0],
+                            colormap='bwr')
 
         # poynting flux
         for ss in ('s1', 's2', 's3'):
             if ss in dadict:
-                set_plot_options(dadict[ss],
-                                 zlabel=ss,
-                                 zrange=[-1, +1],
-                                 colormap='bwr')
+                set_plot_option(dadict[ss],
+                                zlabel=ss,
+                                zrange=[-1, +1],
+                                colormap='bwr')
 
         if 'theta_sb' in dadict:
-            set_plot_options(dadict['theta_sb'],
-                             zlabel='theta_sb',
-                             zrange=[0.0, 180.0],
-                             colormap='bwr')
+            set_plot_option(dadict['theta_sb'],
+                            zlabel='theta_sb',
+                            zrange=[0.0, 180.0],
+                            colormap='bwr')
 
         if 'phi_sb' in dadict:
-            set_plot_options(dadict['phi_sb'],
-                             zlabel='phi_sb',
-                             zrange=[0.0, 180.0],
-                             colormap='bwr')
+            set_plot_option(dadict['phi_sb'],
+                            zlabel='phi_sb',
+                            zrange=[0.0, 180.0],
+                            colormap='bwr')
 
 
         return dadict
