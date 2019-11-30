@@ -117,9 +117,24 @@ def get_plot_options(data, key, val=None):
                 option = option.get(table[i])
             return option[table[-1]]
         except:
-            raise warnings.warn('Error in getting option : %s' % (key))
+            pass
+
+    return val
+
+
+def get_figure_class(var, classdict):
+    opt = var.attrs['plot_options'].get('extras')
+
+    if opt.get('spec', False):
+        cls = classdict.get('Spec')
+    elif opt.get('alt', False):
+        cls = classdict.get('Alt')
+    elif opt.get('map', False):
+        cls = classdict.get('Map')
     else:
-        return val
+        cls = classdict.get('Line')
+
+    return cls
 
 
 def time_clip(var, t1, t2):

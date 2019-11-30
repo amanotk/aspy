@@ -12,9 +12,10 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from .utils import _cast_xarray
-from .utils import _cast_list
-from .plyfigure import Figure1D, FigureSpec, FigureAlt, FigureMap
+from ..utils import _cast_xarray
+from ..utils import _cast_list
+from ..utils import get_figure_class
+from .plyfigure import FigureLine, FigureSpec, FigureAlt, FigureMap
 
 try:
     import pytplot
@@ -22,22 +23,14 @@ except:
     pytplot = None
 
 
-def _get_figure_class(var):
-    extras = var.attrs['plot_options']['extras']
-
-    if 'spec' in extras:
-        cls = FigureSpec
-    elif 'alt' in extras:
-        cls = FigureAlt
-    elif 'map' in extras:
-        cls = FigureMap
-    else:
-        cls = Figure1D
-
-    return cls
-
-
 def generate_stack(var, figure=None, layout=None, options=None):
+    classdict = {
+        'Line' : FigureLine,
+        'Spec' : FigureSpec,
+        'Alt'  : FigureAlt,
+        'Map'  : FigureMap,
+    }
+
     if figure is None:
         figure = dict()
     if layout is None:
@@ -50,7 +43,7 @@ def generate_stack(var, figure=None, layout=None, options=None):
 
     for j in range(num_plots):
         if isinstance(var[j], xr.DataArray):
-            cls = _get_figure_class(var[j])
+            cls = get_figure_class(var[j], classdict)
             plt = cls(var[j], figure, j+1, 1, **options)
             plt.buildfigure()
         elif hasattr(var[j], '__iter__'):

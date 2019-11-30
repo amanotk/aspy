@@ -10,7 +10,7 @@ import pandas as pd
 
 import plotly.graph_objects as go
 
-from .utils import get_plot_options
+from ..utils import get_plot_options
 
 _mpl_jet = \
 [
@@ -72,10 +72,11 @@ def _get_colormap(cmap):
         'seismic'  : _mpl_seismic,
     }
     if isinstance(cmap, list) and len(cmap) == 1:
-        cmap = cmap
+        cmap = cmap[0]
     if isinstance(cmap, str) and cmap in cmaptable:
         cmap = cmaptable[cmap]
     return cmap
+
 
 class Legend(object):
     def __init__(self, label, opts, xpos, ypos):
@@ -141,7 +142,7 @@ class BaseFigure(object):
         pass
 
 
-class Figure1D(BaseFigure):
+class FigureLine(BaseFigure):
     def buildfigure(self):
         get_opt = lambda key, val=None: get_plot_options(self.data, key, val)
         data = self.data
@@ -153,18 +154,28 @@ class Figure1D(BaseFigure):
             scatter = go.Scatter
 
         x = pd.to_datetime(data.time, unit='s')
-        y = np.atleast_2d(data.values)
-        N = y.shape[1]
+
+        # ensure 2D array
+        if data.values.ndim == 1:
+            y = data.values[:,np.newaxis]
+        elif data.values.ndim == 2:
+            y = data.values
+        else:
+            print('Error: input must be either 1D or 2D array')
+            return None
 
         legend_names = get_opt('legend')
         layout = self.figure.layout
         legend = list()
+        N = y.shape[1]
         for i in range(N):
             # line options
             lopt = dict(line_width=1)
             lc = get_opt('line_color')
             if lc is not None and len(lc) == N:
                 lopt['line_color'] = _convert_color(lc[i])
+            else:
+                lopt['line_color'] = _convert_color('k')
             # legend
             opt = dict(lopt, showlegend=False)
             if legend_names is not None:
