@@ -6,6 +6,7 @@
 
 import re
 import numpy as np
+from numpy import ma
 import pandas as pd
 
 import matplotlib
@@ -69,6 +70,10 @@ class BaseFigure(object):
             'pad'       : self.opt['tickpad'],
             'length'    : self.opt['ticklength'],
             'width'     : self.opt['tickwidth'],
+            'top'       : True,
+            'bottom'    : True,
+            'left'      : True,
+            'right'     : True,
         }
         self.axes.xaxis.set_tick_params(**opt)
         self.axes.yaxis.set_tick_params(**opt)
@@ -84,7 +89,8 @@ class FigureLine(BaseFigure):
         get_opt = lambda key, val=None: get_plot_option(self.data, key, val)
         data = self.data
 
-        x = pd.to_datetime(data.time, unit='s')
+        t = data.time.values
+        x = pd.to_datetime(t, unit='s')
 
         # ensure 2D array
         if data.values.ndim == 1:
@@ -137,6 +143,10 @@ class FigureSpec(BaseFigure):
             'pad'       : self.opt['tickpad'],
             'length'    : self.opt['ticklength'],
             'width'     : self.opt['tickwidth'],
+            'top'       : True,
+            'bottom'    : True,
+            'left'      : True,
+            'right'     : True,
         }
         self.axes.xaxis.set_tick_params(**opt)
         self.axes.yaxis.set_tick_params(**opt)
@@ -161,18 +171,22 @@ class FigureSpec(BaseFigure):
 
         if get_opt('ytype', 'linear') == 'log':
             ylog = True
+            self.set_log_ticks(self.axes.yaxis)
         else:
             ylog = False
         y0, y1, zz = interpolate_spectrogram(y, z, ylog=ylog)
 
         if get_opt('ztype', 'linear') == 'log':
-            zz = np.log10(zz)
+            zz = np.log10(ma.masked_less_equal(zz, 0.0))
 
         # colormap and range
         zmin, zmax = get_opt('zrange', [None, None])
         cmap = _get_colormap(get_opt('colormap'))
 
-        #
+        zmin = np.floor(zz.min() if zmin is None else zmin)
+        zmax = np.ceil (zz.max() if zmax is None else zmax)
+
+        # plot
         x0  = mpldates.date2num(x[ 0])
         x1  = mpldates.date2num(x[-1])
         ext = [x0, x1, np.log10(y0), np.log10(y1)]
@@ -199,6 +213,13 @@ class FigureSpec(BaseFigure):
         cb.outline.set_linewidth(self.opt['linewidth'])
         self.cbax.set_ylabel(get_opt('zlabel', ''),
                              fontsize=self.opt['fontsize'])
+
+    def set_log_ticks(self, axis, dec=1):
+        f  = lambda x, p: r'$\mathregular{10^{%d}}$' % (x)
+        majorloc  = matplotlib.ticker.MultipleLocator(dec)
+        formatter = matplotlib.ticker.FuncFormatter(f)
+        axis.set_major_locator(majorloc)
+        axis.set_major_formatter(formatter)
 
 
 class FigureAlt(BaseFigure):

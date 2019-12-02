@@ -66,11 +66,14 @@ def generate_stack(var, layout=None, options=None):
         axs.append(plt.axes(rect))
     axs[0].get_shared_x_axes().join(*tuple(axs))
 
+    for j in range(num_plots-1):
+        axs[j].xaxis.set_ticklabels([])
+
     # plot
     for j in range(num_plots):
         if isinstance(var[j], xr.DataArray):
             cls = get_figure_class(var[j], classdict)
-            obj = cls(var[j], figure, axs[j], **opitons)
+            obj = cls(var[j], figure, axs[j], **options)
             obj.buildfigure()
         elif hasattr(var[j], '__iter__'):
             dat = var[j]

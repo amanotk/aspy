@@ -4,6 +4,9 @@
 
 """
 
+import numpy as np
+np.seterr(divide = 'ignore')
+
 import pandas as pd
 import xarray as xr
 
