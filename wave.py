@@ -16,7 +16,7 @@ from scipy import fftpack, signal, ndimage, constants
 import xarray as xr
 import pandas as pd
 
-from insitu import _cast_list
+from insitu import cast_list
 from insitu import set_plot_option
 
 
@@ -173,7 +173,7 @@ def spectrogram(x, fs, nperseg, noverlap=None, window='blackman'):
         }
 
     # calculate sum of all input
-    x = _cast_list(x)
+    x = cast_list(x)
     f, t, s = signal.spectrogram(x[0], **args)
     for i in range(1, len(x)):
         ff, tt, ss = signal.spectrogram(x[i], **args)

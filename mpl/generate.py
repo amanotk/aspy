@@ -12,8 +12,9 @@ import pandas as pd
 import matplotlib
 from matplotlib import pyplot as plt
 
-from ..utils import _cast_xarray
-from ..utils import _cast_list
+from ..utils import default_layout
+from ..utils import cast_xarray
+from ..utils import cast_list
 from ..utils import get_figure_class
 from ..utils import get_figure_layout
 from ..utils import get_layout_option
@@ -34,7 +35,7 @@ def generate_stack(var, layout=None, options=None):
         'Map'  : FigureMap,
     }
 
-    var = _cast_list(_cast_xarray(var))
+    var = cast_list(cast_xarray(var))
 
     # get figure layout
     if layout is None:
@@ -50,11 +51,9 @@ def generate_stack(var, layout=None, options=None):
 
     # plot
     if options is None:
-        options = {
-            'dpi'      : dpi,
-            'fontsize' : get_layout_option(layout, 'fontsize'),
-        }
+        options = default_layout.copy()
 
+    # create axes
     num_plots = len(var)
     for j in range(num_plots):
         bbox = {
@@ -65,9 +64,13 @@ def generate_stack(var, layout=None, options=None):
         }
         rect = bbox_to_rect(bbox)
         axs.append(plt.axes(rect))
+    axs[0].get_shared_x_axes().join(*tuple(axs))
+
+    # plot
+    for j in range(num_plots):
         if isinstance(var[j], xr.DataArray):
             cls = get_figure_class(var[j], classdict)
-            obj = cls(var[j], figure, axs[j], **options)
+            obj = cls(var[j], figure, axs[j], **opitons)
             obj.buildfigure()
         elif hasattr(var[j], '__iter__'):
             dat = var[j]
@@ -75,6 +78,5 @@ def generate_stack(var, layout=None, options=None):
                 cls = get_figure_class(dat[k], classdict)
                 obj = cls(dat[k], figure, axs[j], **options)
                 obj.buildfigure()
-    axs[0].get_shared_x_axes().join(*tuple(axs))
 
     return figure

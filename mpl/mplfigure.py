@@ -9,44 +9,30 @@ import numpy as np
 import pandas as pd
 
 import matplotlib
+from matplotlib import dates as mpldates
 from matplotlib import pyplot as plt
 
 from ..utils import get_plot_option
-
-
-def _convert_color(color):
-    colortable = {
-        'r' : 'red',
-        'g' : 'green',
-        'b' : 'blue',
-        'c' : 'cyan',
-        'y' : 'yellow',
-        'm' : 'magenta',
-        'w' : 'white',
-        'k' : 'black',
-    }
-    if not isinstance(color, str):
-        return color
-
-    if color in colortable:
-        return colortable[color]
-    elif re.fullmatch(r'^#([0-f][0-f][0-f]){1,2}', color):
-        return color
-    else:
-        raise ValueError('unrecognized color format: %s' % (color))
+from ..utils import interpolate_spectrogram
 
 
 def _get_colormap(cmap):
-    cmaptable = {
-        'jet'      : _mpl_jet,
-        'bwr'      : _mpl_bwr,
-        'seismic'  : _mpl_seismic,
-    }
     if isinstance(cmap, list) and len(cmap) == 1:
         cmap = cmap[0]
-    if isinstance(cmap, str) and cmap in cmaptable:
-        cmap = cmaptable[cmap]
     return cmap
+
+
+def create_colorbar_axes(axes, size=0.1, sep=0.2):
+    axes.apply_aspect() # do this just in case
+    axpos = axes.get_position()
+
+    l = axpos.x0 + axpos.width + sep
+    b = axpos.y0
+    w = size
+    h = axpos.height
+    cbax = plt.axes([l, b, w, h])
+
+    return cbax
 
 
 class BaseFigure(object):
@@ -54,32 +40,40 @@ class BaseFigure(object):
         self.data   = data
         self.figure = figure
         self.axes   = axes
-        self.setup_default_axes()
         self.setup_options(options)
+        self.setup_default_axes()
 
     def setup_options(self, options):
-        self.opt = dict()
-        self.opt_point = {
-            'linewidth'  : 1,
-            'fontsize'   : 16,
-            'labelsize'  : 16,
-            'ticklength' : 6,
-            'tickwidth'  : 2,
-            'tickpad'    : 2,
-        }
-        for key in options:
-            self.opt[key] = options[key]
+        opt_pixel_to_point = [
+            'linewidth',
+            'fontsize',
+            'labelsize',
+            'ticklength',
+            'tickwidth',
+            'tickpad',
+            'colorbar_sep',
+            'colorbar_size',
+        ]
+        self.opt = options.copy()
         # convert size in pixel to point
         if 'dpi' in self.opt:
             point = lambda s: s*72/self.opt['dpi']
-            for v in self.opt_point.keys():
+            for v in opt_pixel_to_point:
                 if v in self.opt:
                     self.opt[v] = point(self.opt[v])
-                else:
-                    self.opt[v] = point(self.opt_point[v])
 
     def setup_default_axes(self):
-        pass
+        # tick options
+        opt = {
+            'labelsize' : self.opt['labelsize'],
+            'pad'       : self.opt['tickpad'],
+            'length'    : self.opt['ticklength'],
+            'width'     : self.opt['tickwidth'],
+        }
+        self.axes.xaxis.set_tick_params(**opt)
+        self.axes.yaxis.set_tick_params(**opt)
+        for axis in ['top','bottom','left','right']:
+            self.axes.spines[axis].set_linewidth(self.opt['linewidth'])
 
     def buildfigure(self):
         pass
@@ -111,25 +105,18 @@ class FigureLine(BaseFigure):
             }
             lc = get_opt('line_color')
             if lc is not None and len(lc) == N:
-                opt['color'] = _convert_color(lc[i])
+                opt['color'] = lc[i]
             else:
-                opt['color'] = _convert_color('k')
+                opt['color'] = 'k'
             # legend
             if legend_names is not None:
                 opt['label'] = legend_names[i]
             # plot
-            plot = plt.plot(x, y[:,i], **opt)
-            # tick options
-            opt = {
-                'labelsize' : self.opt['labelsize'],
-                'pad'       : self.opt['tickpad'],
-                'length'    : self.opt['ticklength'],
-                'width'     : self.opt['tickwidth'],
-            }
-            plt.tick_params(**opt)
+            plot = self.axes.plot(x, y[:,i], **opt)
 
         # update axes
-        plt.ylabel(get_opt('ylabel', ''), fontsize=self.opt['fontsize'])
+        self.axes.set_ylabel(get_opt('ylabel', ''),
+                             fontsize=self.opt['fontsize'])
 
         # legend
         legend_opt = {
@@ -139,27 +126,79 @@ class FigureLine(BaseFigure):
             'frameon'        : False,
             'fontsize'       : self.opt['fontsize'],
         }
-        plt.legend(**legend_opt)
+        self.axes.legend(**legend_opt)
 
 
 class FigureSpec(BaseFigure):
+    def setup_default_axes(self):
+        # tick options
+        opt = {
+            'labelsize' : self.opt['labelsize'],
+            'pad'       : self.opt['tickpad'],
+            'length'    : self.opt['ticklength'],
+            'width'     : self.opt['tickwidth'],
+        }
+        self.axes.xaxis.set_tick_params(**opt)
+        self.axes.yaxis.set_tick_params(**opt)
+        # colorbar size and sep should be fraction unit
+        cbsep  = self.opt['colorbar_sep']  / self.opt['width']
+        cbsize = self.opt['colorbar_size'] / self.opt['width']
+        self.cbax = create_colorbar_axes(self.axes, size=cbsize, sep=cbsep)
+        self.cbax.xaxis.set_tick_params(**opt)
+        self.cbax.yaxis.set_tick_params(**opt)
+        for ax in (self.axes, self.cbax):
+            for axis in ['top','bottom','left','right']:
+                ax.spines[axis].set_linewidth(self.opt['linewidth'])
+
     def buildfigure(self):
         get_opt = lambda key, val=None: get_plot_option(self.data, key, val)
         data = self.data
 
-        x = pd.to_datetime(data.time, unit='s')
-        y = data.coords['spec_bins']
-        z = data.values.T
+        t = data.time.values
+        x = pd.to_datetime(t, unit='s')
+        y = data.coords['spec_bins'].values
+        z = data.values
 
-        # TODO
-        if y.ndim == 2:
-            y = y[0]
+        if get_opt('ytype', 'linear') == 'log':
+            ylog = True
+        else:
+            ylog = False
+        y0, y1, zz = interpolate_spectrogram(y, z, ylog=ylog)
 
-        # TODO
         if get_opt('ztype', 'linear') == 'log':
-            z = np.log10(z)
+            zz = np.log10(zz)
 
-        print('FigureSpec : buildfigure called')
+        # colormap and range
+        zmin, zmax = get_opt('zrange', [None, None])
+        cmap = _get_colormap(get_opt('colormap'))
+
+        #
+        x0  = mpldates.date2num(x[ 0])
+        x1  = mpldates.date2num(x[-1])
+        ext = [x0, x1, np.log10(y0), np.log10(y1)]
+        opt_imshow = {
+            'origin'     : 'lower',
+            'aspect'     : 'auto',
+            'extent'     : ext,
+            'vmin'       : zmin,
+            'vmax'       : zmax,
+            'cmap'       : cmap,
+            'rasterized' : True,
+        }
+        im = self.axes.imshow(zz.T, **opt_imshow)
+        self.axes.set_xlim(ext[0], ext[1])
+        self.axes.set_ylim(ext[2], ext[3])
+        self.axes.xaxis_date()
+
+        # update axes
+        self.axes.set_ylabel(get_opt('ylabel', ''),
+                             fontsize=self.opt['fontsize'])
+
+        # colorbar
+        cb = plt.colorbar(im, cax=self.cbax, drawedges=False)
+        cb.outline.set_linewidth(self.opt['linewidth'])
+        self.cbax.set_ylabel(get_opt('zlabel', ''),
+                             fontsize=self.opt['fontsize'])
 
 
 class FigureAlt(BaseFigure):

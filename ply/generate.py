@@ -12,8 +12,8 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from ..utils import _cast_xarray
-from ..utils import _cast_list
+from ..utils import cast_xarray
+from ..utils import cast_list
 from ..utils import get_figure_class
 from .plyfigure import FigureLine, FigureSpec, FigureAlt, FigureMap
 
@@ -35,7 +35,7 @@ def generate_stack(var, figure=None, layout=None, options=None):
         figure = dict()
     if layout is None:
         layout = dict()
-    var = _cast_list(_cast_xarray(var))
+    var = cast_list(cast_xarray(var))
     num_plots = len(var)
 
     figure = make_subplots(rows=num_plots, cols=1, **figure)

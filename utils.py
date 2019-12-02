@@ -17,7 +17,7 @@ except:
 
 
 default_layout = {
-    'dpi'           : 144,
+    'dpi'           : 300,
     'width'         : 800,
     'height'        : 800,
     'vspace'        : 25,
@@ -25,7 +25,14 @@ default_layout = {
     'margin_bottom' : 80,
     'margin_left'   : 100,
     'margin_right'  : 140,
-    'fontsize'      : 16,
+    'linewidth'     : 1,
+    'fontsize'      : 14,
+    'labelsize'     : 14,
+    'ticklength'    : 6,
+    'tickwidth'     : 1,
+    'tickpad'       : 2,
+    'colorbar_sep'  : 50,
+    'colorbar_size' : 100,
 }
 
 _option_table = {
@@ -63,26 +70,26 @@ _option_table = {
 }
 
 
-def _cast_xarray(var):
+def cast_xarray(var):
     "cast input (scalar or sequence) into xarray's DataArray"
     if isinstance(var, str) and pytplot is not None:
         return pytplot.data_quants[var]
     elif isinstance(var, xr.DataArray):
         return var
     elif hasattr(var, '__iter__'):
-        return list([_cast_xarray(v) for v in var])
+        return list([cast_xarray(v) for v in var])
     else:
         raise ValueError('Unrecognized input')
 
 
-def _cast_list(var):
+def cast_list(var):
     if not isinstance(var, list):
         return list([var])
     else:
         return var
 
 
-def _process_kwargs(opt, kwargs, key, newkey=None):
+def process_kwargs(opt, kwargs, key, newkey=None):
     if newkey is None:
         newkey = key
     if key in kwargs:
@@ -156,7 +163,7 @@ def get_figure_class(var, classdict):
 
 
 def get_figure_layout(var, **kwargs):
-    var = _cast_list(_cast_xarray(var))
+    var = cast_list(cast_xarray(var))
 
     # work in unit of pixels
     fig_h = get_layout_option(kwargs, 'height')
@@ -224,11 +231,50 @@ def bbox_to_rect(bbox):
     return l, b, w, h
 
 
+def interpolate_spectrogram(ybin, data, **kwargs):
+    from scipy import interpolate
+    def interp(x, y, newx):
+        f = interpolate.interp1d(x, y, axis=0, kind='nearest',
+                                 bounds_error=False, fill_value=None)
+        return f(newx)
+
+    nx = ybin.shape[0]
+
+    # check ybin
+    if ybin.ndim == 1:
+        y0 = ybin[ 0]
+        y1 = ybin[-1]
+        ny = ybin.shape[-1]
+        yy = np.tile(ybin, (nx,1))
+    elif ybin.ndim == 2:
+        y0 = ybin[:, 0].min()
+        y1 = ybin[:,-1].max()
+        ny = ybin.shape[-1]
+        yy = ybin
+    else:
+        raise ValueError('Invalid input')
+
+    # interpolation points
+    my = 2*ny
+    if 'ylog' in kwargs and kwargs['ylog']:
+        bine = np.logspace(np.log10(y0), np.log10(y1), my+1)
+    else:
+        print('error')
+        bine = np.linspace(y0, y1, my+1)
+    binc = 0.5*(bine[+1:] + bine[:-1])
+
+    zz = np.zeros((nx, my), np.float64)
+    for ii in range(nx):
+        zz[ii,:] = interp(yy[ii,:], data[ii,:], binc)
+
+    return y0, y1, zz
+
+
 def time_clip(var, t1, t2):
     t1 = pd.Timestamp(t1).timestamp()
     t2 = pd.Timestamp(t2).timestamp()
 
-    var = _cast_list(_cast_xarray(var))
+    var = cast_list(cast_xarray(var))
     ret = [v.loc[t1:t2] for v in var]
     if len(ret) == 1:
         return ret[0]
