@@ -46,6 +46,8 @@ class BaseFigure(object):
 
     def setup_options(self, options):
         opt_pixel_to_point = [
+            'width',
+            'height',
             'linewidth',
             'fontsize',
             'labelsize',
@@ -174,7 +176,9 @@ class FigureSpec(BaseFigure):
             self.set_log_ticks(self.axes.yaxis)
         else:
             ylog = False
-        y0, y1, zz = interpolate_spectrogram(y, z, ylog=ylog)
+        zz, opt = interpolate_spectrogram(y, z, ylog=ylog)
+        y0 = opt['y0']
+        y1 = opt['y1']
 
         if get_opt('ztype', 'linear') == 'log':
             zz = np.log10(ma.masked_less_equal(zz, 0.0))

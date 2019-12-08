@@ -26,13 +26,13 @@ default_layout = {
     'margin_left'   : 100,
     'margin_right'  : 140,
     'linewidth'     : 1,
-    'fontsize'      : 14,
-    'labelsize'     : 14,
+    'fontsize'      : 12,
+    'labelsize'     : 12,
     'ticklength'    : 6,
     'tickwidth'     : 1,
     'tickpad'       : 2,
-    'colorbar_sep'  : 50,
-    'colorbar_size' : 100,
+    'colorbar_sep'  : 20,
+    'colorbar_size' : 25,
 }
 
 _option_table = {
@@ -267,7 +267,9 @@ def interpolate_spectrogram(ybin, data, **kwargs):
     for ii in range(nx):
         zz[ii,:] = interp(yy[ii,:], data[ii,:], binc)
 
-    return y0, y1, zz
+    opt = dict(y0=y0, y1=y1, bine=bine, binc=binc)
+
+    return zz, opt
 
 
 def time_clip(var, t1, t2):

@@ -22,17 +22,7 @@ from .tplot2netcdf import load as ncload
 
 
 def ply_tplot(var, **kwargs):
-    figure_opt = dict(shared_xaxes=True)
-    layout_opt = dict()
-
-    # figure options
-    process_kwargs(figure_opt, kwargs, 'vertical_spacing')
-
-    # layout options
-    process_kwargs(layout_opt, kwargs, 'width')
-    process_kwargs(layout_opt, kwargs, 'height')
-
-    return ply_generate_stack(var, figure_opt, layout_opt, kwargs)
+    return ply_generate_stack(var)
 
 
 def mpl_tplot(var, **kwargs):

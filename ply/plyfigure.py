@@ -6,11 +6,14 @@
 
 import re
 import numpy as np
+from numpy import ma
 import pandas as pd
 
 import plotly.graph_objects as go
 
 from ..utils import get_plot_option
+from ..utils import interpolate_spectrogram
+
 
 _mpl_jet = \
 [
@@ -79,11 +82,12 @@ def _get_colormap(cmap):
 
 
 class Legend(object):
-    def __init__(self, label, opts, xpos, ypos):
+    def __init__(self, label, xpos, ypos, size, opts):
         self.label = label
-        self.opts = opts
         self.xpos = xpos
         self.ypos = ypos
+        self.size = size
+        self.opts = opts
         self._build()
 
     def _build(self):
@@ -96,7 +100,7 @@ class Legend(object):
         self.line = go.layout.Shape(
             type='line', x0=x0, x1=x1, y0=y0, y1=y1, xref='paper', yref='paper',
             **self.opts)
-        self.text = go.layout.Annotation(
+        self.text = go.layout.Annotation(font_size=self.size,
             text=self.label, x=x2, y=y2, xref='paper', yref='paper',
             xanchor='left', yanchor='middle', showarrow=False)
 
@@ -108,35 +112,36 @@ class Legend(object):
 
 
 class BaseFigure(object):
-    def __init__(self, data, figure, row, col, **options):
+    def __init__(self, data, figure, axes, **options):
         self.data   = data
         self.figure = figure
-        self.row    = row
-        self.col    = col
-        self.webgl  = False
-        self.setup_default_axes()
+        self.axes   = axes
         self.setup_options(options)
+        self.setup_default_axes()
 
     def setup_options(self, options):
         self.webgl = options.get('use_webgl', False)
+        self.opt = options.copy()
 
     def setup_default_axes(self):
         xaxis = dict(
-            linewidth=1,
+            linewidth=self.opt['linewidth'],
             linecolor='#000',
             ticks='outside',
             mirror='allticks',
             showline=True,
+            showticklabels=True,
         )
         yaxis = dict(
-            linewidth=1,
+            linewidth=self.opt['linewidth'],
             linecolor='#000',
             ticks='outside',
             mirror='allticks',
             showline=True,
+            showticklabels=True,
         )
-        self.figure.update_xaxes(**xaxis, row=self.row, col=self.col)
-        self.figure.update_yaxes(**yaxis, row=self.row, col=self.col)
+        self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
+        self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
 
     def buildfigure(self):
         pass
@@ -146,6 +151,8 @@ class FigureLine(BaseFigure):
     def buildfigure(self):
         get_opt = lambda key, val=None: get_plot_option(self.data, key, val)
         data = self.data
+        font = dict(titlefont_size=self.opt['fontsize'],
+                    tickfont_size=self.opt['fontsize'])
 
         # use WebGL version or not
         if self.webgl:
@@ -170,30 +177,34 @@ class FigureLine(BaseFigure):
         N = y.shape[1]
         for i in range(N):
             # line options
-            lopt = dict(line_width=1)
+            lopt = dict(line_width=self.opt['linewidth'])
             lc = get_opt('line_color')
             if lc is not None and len(lc) == N:
                 lopt['line_color'] = _convert_color(lc[i])
             else:
                 lopt['line_color'] = _convert_color('k')
             # legend
-            opt = dict(lopt, showlegend=False)
+            opt = dict(xaxis=self.axes['x'],
+                       yaxis=self.axes['y'],
+                       showlegend=False)
             if legend_names is not None:
-                xaxis = 'xaxis%d' % (self.row)
-                yaxis = 'yaxis%d' % (self.row)
-                xpos = layout[xaxis].domain[1] + 0.01
-                ypos = layout[yaxis].domain[1] - 0.02 - 0.04*i
-                legend.append(Legend(legend_names[i], lopt, xpos, ypos))
-                opt  = dict(opt, name=legend_names[i])
+                size = self.opt['fontsize']
+                xdom = self.axes['xaxis']['domain']
+                ydom = self.axes['yaxis']['domain']
+                xpos = xdom[1] + 2*self.opt['ticklength']/self.opt['width']
+                ypos = ydom[1] - (i + 0.5)*size/self.opt['width']
+                legend.append(Legend(legend_names[i], xpos, ypos, size, lopt))
+                opt['name'] = legend_names[i]
             # plot
+            opt.update(lopt)
             plot = scatter(x=x, y=y[:,i], mode='lines', **opt)
-            self.figure.add_trace(plot, row=self.row, col=self.col)
+            self.figure.add_trace(plot)
 
         # update axes
-        xaxis = dict()
-        yaxis = dict(title=get_opt('ylabel'))
-        self.figure.update_xaxes(**xaxis, row=self.row, col=self.col)
-        self.figure.update_yaxes(**yaxis, row=self.row, col=self.col)
+        xaxis = dict(font)
+        yaxis = dict(font, title_text=get_opt('ylabel'))
+        self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
+        self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
 
         # legend
         text = list(layout.annotations)
@@ -208,50 +219,74 @@ class FigureSpec(BaseFigure):
     def buildfigure(self):
         get_opt = lambda key, val=None: get_plot_option(self.data, key, val)
         data = self.data
+        font = dict(titlefont_size=self.opt['fontsize'],
+                    tickfont_size=self.opt['fontsize'])
 
-        x = pd.to_datetime(data.time, unit='s')
-        y = data.coords['spec_bins']
-        z = data.values.T
+        t = data.time.values
+        x = pd.to_datetime(t, unit='s')
+        y = data.coords['spec_bins'].values
+        z = data.values
 
-        # TODO
-        if y.ndim == 2:
-            y = y[0]
+        if get_opt('ytype', 'linear') == 'log':
+            ylog = True
+            self.set_log_ticks(self.axes['yaxis'])
+        else:
+            ylog = False
+        zz, opt = interpolate_spectrogram(y, z, ylog=ylog)
+        yy = np.log10(opt['binc'])
 
-        # TODO
         if get_opt('ztype', 'linear') == 'log':
-            z = np.log10(z)
+            zz = np.log10(ma.masked_less_equal(zz, 0.0))
 
         # colorbar
         layout = self.figure.layout
-        xaxis = 'xaxis%d' % (self.row)
-        yaxis = 'yaxis%d' % (self.row)
-        xpos = layout[xaxis].domain[1] + 0.01
-        ypos = layout[yaxis].domain[0]
-        ylen = layout[yaxis].domain[1] - ypos
+        xdom = self.axes['xaxis']['domain']
+        ydom = self.axes['yaxis']['domain']
+        xpos = xdom[1]
+        ypos = ydom[0]
+        xlen = self.opt['colorbar_size']
+        ylen = ydom[1] - ydom[0]
+        xpad = self.opt['colorbar_sep']
         ypad = 0
-        cb = dict(x=xpos, y=ypos, len=ylen, ypad=ypad, yanchor='bottom',
+
+        cb = dict(font,
+                  x=xpos, y=ypos, xpad=xpad, ypad=ypad, yanchor='bottom',
+                  thickness=xlen, thicknessmode='pixels',
+                  len=ylen, lenmode='fraction',
+                  outlinewidth=self.opt['linewidth'],
                   title=get_opt('zlabel'),
-                  titleside='right')
+                  titleside='right',
+                  ticks='outside')
 
         # colormap and range
         zmin, zmax = get_opt('zrange', [None, None])
         cmap = _get_colormap(get_opt('colormap'))
 
+        zmin = np.floor(zz.min() if zmin is None else zmin)
+        zmax = np.ceil (zz.max() if zmax is None else zmax)
+
         # heatmap
         opt = dict(name='',
+                   xaxis=self.axes['x'],
+                   yaxis=self.axes['y'],
                    colorscale=cmap,
                    colorbar=cb,
                    zmin=zmin,
                    zmax=zmax)
-        hm = go.Heatmap(z=z, x=x, y=y, **opt)
-        self.figure.add_trace(hm, row=self.row, col=self.col)
+        hm = go.Heatmap(z=zz.T.filled(-np.inf), x=x, y=yy, **opt)
+        self.figure.add_trace(hm)
 
         # update axes
-        xaxis = dict()
-        yaxis = dict(title=get_opt('ylabel'),
-                     type=get_opt('ytype'))
-        self.figure.update_xaxes(**xaxis, row=self.row, col=self.col)
-        self.figure.update_yaxes(**yaxis, row=self.row, col=self.col)
+        xaxis = dict(font)
+        yaxis = dict(font, title_text=get_opt('ylabel'))
+        self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
+        self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
+
+    def set_log_ticks(self, axis, dec=1):
+        opt = dict(tickprefix='10<sup>',
+                   ticksuffix='</sup>',
+                   tickformat='d')
+        self.figure.update_yaxes(**opt, selector=axis)
 
 
 class FigureAlt(BaseFigure):
