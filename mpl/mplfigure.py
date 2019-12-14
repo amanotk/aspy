@@ -13,6 +13,9 @@ import matplotlib
 from matplotlib import dates as mpldates
 from matplotlib import pyplot as plt
 
+from pandas.plotting import register_matplotlib_converters
+register_matplotlib_converters()
+
 from ..utils import get_plot_option
 from ..utils import interpolate_spectrogram
 
@@ -127,14 +130,15 @@ class FigureLine(BaseFigure):
                              fontsize=self.opt['fontsize'])
 
         # legend
-        legend_opt = {
-            'bbox_to_anchor' : (1.01, 1.0),
-            'loc'            : 'upper left',
-            'borderaxespad'  : 0,
-            'frameon'        : False,
-            'fontsize'       : self.opt['fontsize'],
-        }
-        self.axes.legend(**legend_opt)
+        if legend_names is not None:
+            legend_opt = {
+                'bbox_to_anchor' : (1.01, 1.0),
+                'loc'            : 'upper left',
+                'borderaxespad'  : 0,
+                'frameon'        : False,
+                'fontsize'       : self.opt['fontsize'],
+            }
+            self.axes.legend(**legend_opt)
 
 
 class FigureSpec(BaseFigure):

@@ -70,6 +70,14 @@ _option_table = {
 }
 
 
+def is_ipython():
+    try:
+        from IPython import get_ipython
+        return get_ipython() is not None
+    except:
+        return False
+
+
 def cast_xarray(var):
     "cast input (scalar or sequence) into xarray's DataArray"
     if isinstance(var, str) and pytplot is not None:
@@ -143,14 +151,12 @@ def get_plot_option(data, key, val=None):
     return val
 
 
-def get_layout_option(kwargs, key):
-    return kwargs.get(key, default_layout[key])
-
-
 def get_figure_class(var, classdict):
     opt = var.attrs['plot_options'].get('extras')
 
-    if opt.get('spec', False):
+    if opt.get('plotter', None) is not None:
+        cls = opt.get('plotter')
+    elif opt.get('spec', False):
         cls = classdict.get('Spec')
     elif opt.get('alt', False):
         cls = classdict.get('Alt')
@@ -165,15 +171,19 @@ def get_figure_class(var, classdict):
 def get_figure_layout(var, **kwargs):
     var = cast_list(cast_xarray(var))
 
-    # work in unit of pixels
-    fig_h = get_layout_option(kwargs, 'height')
-    fig_w = get_layout_option(kwargs, 'width')
+    layout = default_layout.copy()
+    for key in layout.keys():
+        if key in kwargs:
+            layout[key] = kwargs[key]
 
-    # margin
-    margin_t = get_layout_option(kwargs, 'margin_top')
-    margin_b = get_layout_option(kwargs, 'margin_bottom')
-    margin_l = get_layout_option(kwargs, 'margin_left')
-    margin_r = get_layout_option(kwargs, 'margin_right')
+    # work in unit of pixels
+    fig_h    = layout['height']
+    fig_w    = layout['width']
+    margin_t = layout['margin_top']
+    margin_b = layout['margin_bottom']
+    margin_l = layout['margin_left']
+    margin_r = layout['margin_right']
+    vspace   = layout['vspace']
 
     # var_label
     if 'var_label' in kwargs:
@@ -182,12 +192,11 @@ def get_figure_layout(var, **kwargs):
     # get unit size for each panel in pixels
     N  = len(var)
     ps = np.array([get_plot_option(v, 'panelsize') for v in var])
-    vs = get_layout_option(kwargs, 'vspace')
-    ph = (fig_h - (margin_t + margin_b + vs*(N-1))) / N
+    ph = (fig_h - (margin_t + margin_b + vspace*(N-1))) / N
     pw = (fig_w - (margin_l + margin_r))
     hh = ph * ps
-    ww = pw * np.ones((N,))
-    vv = vs * np.ones((N,))
+    ww = np.ones((N,)) * pw
+    vv = np.ones((N,)) * vspace
 
     # bounding box in pixels
     x0 = np.zeros_like(hh)
@@ -220,7 +229,9 @@ def get_figure_layout(var, **kwargs):
         'y1' : y1 / fig_h,
     }
 
-    return bbox_pixels, bbox_relative
+    layout['bbox_pixels']   = bbox_pixels
+    layout['bbox_relative'] = bbox_relative
+    return layout
 
 
 def bbox_to_rect(bbox):

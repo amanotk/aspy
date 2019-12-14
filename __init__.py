@@ -22,11 +22,11 @@ from .tplot2netcdf import load as ncload
 
 
 def ply_tplot(var, **kwargs):
-    return ply_generate_stack(var)
+    return ply_generate_stack(var, **kwargs)
 
 
 def mpl_tplot(var, **kwargs):
-    return mpl_generate_stack(var)
+    return mpl_generate_stack(var, **kwargs)
 
 
 #
