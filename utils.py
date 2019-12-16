@@ -191,7 +191,13 @@ def get_figure_layout(var, **kwargs):
 
     # get unit size for each panel in pixels
     N  = len(var)
-    ps = np.array([get_plot_option(v, 'panelsize') for v in var])
+    ps = [0] * N
+    for i in range(N):
+        if isinstance(var[i], xr.DataArray):
+            ps[i] = get_plot_option(var[i], 'panelsize')
+        elif hasattr(var[i], '__iter__'):
+            ps[i] = get_plot_option(var[i][0], 'panelsize')
+    ps = np.array(ps)
     ph = (fig_h - (margin_t + margin_b + vspace*(N-1))) / N
     pw = (fig_w - (margin_l + margin_r))
     hh = ph * ps
@@ -293,3 +299,51 @@ def time_clip(var, t1, t2):
         return ret[0]
     else:
         return ret
+
+
+def create_xarray(**data):
+    # default attribute
+    default_attrs = {
+        'plot_options' : {
+            'xaxis_opt' : {
+                'axis_label' : 'Time',
+                'x_axis_type' : 'linear',
+            },
+            'yaxis_opt' : {
+                'axis_label' : 'Y',
+                'y_axis_type' : 'linear',
+            },
+            'zaxis_opt' : {
+                'axis_label' : 'Z',
+                'z_axis_type' : 'linear',
+            },
+            'trange' : [0.0, 1.0],
+            'extras' : {
+                'spec' : 0,
+                'colormap' : ['viridis'],
+                'panel_size' : 1,
+                'char_size' : 10,
+            },
+        },
+    }
+
+    if 'x' in data and 'y' in data:
+        x = np.array(data['x'])
+        y = np.array(data['y'])
+        # check compatibility
+        if x.ndim == 1 and y.ndim == 1 and x.size == y.size:
+            dims = ('time',)
+        elif x.ndim == 1 and y.ndim == 2 and x.size == y.shape[0]:
+            dims = ('time', 'vdim')
+            v = np.arange(y.shape[1])
+        else:
+            raise ValueError('Error: incompatible input')
+    else:
+            raise ValueError('Error: incompatible input')
+
+    # create DataArray object
+    obj = xr.DataArray(y, dims=dims,
+                       coords={'time' : ('time', x), 'v' : ('vdim', v)})
+    obj.attrs = default_attrs.copy()
+
+    return obj

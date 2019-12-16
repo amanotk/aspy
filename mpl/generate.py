@@ -20,6 +20,15 @@ from ..utils import bbox_to_rect
 from .mplfigure import FigureLine, FigureSpec, FigureAlt, FigureMap
 
 
+def matplotlib_change_style(params):
+    current = matplotlib.rcParams.copy()
+    params  = params.copy()
+    if 'backend' in params:
+        params.pop('backend')
+    matplotlib.rcParams.update(params)
+    return current
+
+
 def generate_stack(var, **options):
     classdict = {
         'Line' : FigureLine,
@@ -27,6 +36,9 @@ def generate_stack(var, **options):
         'Alt'  : FigureAlt,
         'Map'  : FigureMap,
     }
+
+    # use deafult matplotlib style
+    style = matplotlib_change_style(matplotlib.rcParamsDefault)
 
     var = cast_list(cast_xarray(var))
 
@@ -69,5 +81,11 @@ def generate_stack(var, **options):
                 cls = get_figure_class(dat[k], classdict)
                 obj = cls(dat[k], figure, axs[j], **layout)
                 obj.buildfigure()
+    if 'title' in layout:
+        axs[0].set_title(layout['title'], fontsize=layout['fontsize'])
 
+    # restore
+    style = matplotlib_change_style(style)
+
+    plt.show()
     return figure
