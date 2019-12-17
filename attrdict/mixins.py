@@ -7,7 +7,7 @@ import re
 
 import six
 
-from attrdict.merge import merge
+from .merge import merge
 
 
 __all__ = ['Attr', 'MutableAttr']

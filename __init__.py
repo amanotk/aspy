@@ -5,20 +5,29 @@
 """
 
 import numpy as np
+import scipy as sp
+from scipy import constants
 np.seterr(divide = 'ignore')
 
 import pandas as pd
 import xarray as xr
 
-from .utils import cast_xarray
-from .utils import cast_list
-from .utils import process_kwargs
-from .utils import set_plot_option
-from .utils import time_clip
+from .utils import *
 from .ply.generate import generate_stack as ply_generate_stack
 from .mpl.generate import generate_stack as mpl_generate_stack
 from .tplot2netcdf import save as ncsave
 from .tplot2netcdf import load as ncload
+
+from .attrdict import AttrDict
+
+const = AttrDict( {
+    'qme' : constants.e / constants.electron_mass,
+    'qmp' : constants.e / constants.proton_mass,
+    'me'  : constants.electron_mass,
+    'mp'  : constants.proton_mass,
+    'mu0' : constants.mu_0,
+    'Re'  : 6378.1,
+    })
 
 
 def ply_tplot(var, **kwargs):

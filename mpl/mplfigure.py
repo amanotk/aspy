@@ -128,7 +128,7 @@ class FigureLine(BaseFigure):
         # update axes
         self.axes.set_ylabel(get_opt('ylabel', ''),
                              fontsize=self.opt['fontsize'])
-        self.axes.set_xlim(get_opt('trange'))
+        #self.axes.set_xlim(get_opt('trange'))
 
         # legend
         if legend_names is not None:
@@ -216,7 +216,7 @@ class FigureSpec(BaseFigure):
         # update axes
         self.axes.set_ylabel(get_opt('ylabel', ''),
                              fontsize=self.opt['fontsize'])
-        self.axes.set_xlim(get_opt('trange'))
+        #self.axes.set_xlim(get_opt('trange'))
 
         # colorbar
         cb = plt.colorbar(im, cax=self.cbax, drawedges=False)

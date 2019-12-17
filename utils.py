@@ -289,7 +289,7 @@ def interpolate_spectrogram(ybin, data, **kwargs):
     return zz, opt
 
 
-def time_clip(var, t1, t2):
+def time_slice(var, t1, t2):
     t1 = pd.Timestamp(t1).timestamp()
     t2 = pd.Timestamp(t2).timestamp()
 
@@ -347,3 +347,23 @@ def create_xarray(**data):
     obj.attrs = default_attrs.copy()
 
     return obj
+
+
+def sph2xyz(r, t, p, degree=True):
+    if degree:
+        t = np.deg2rad(t)
+        p = np.deg2rad(p)
+    x = r * np.sin(t) * np.cos(p)
+    y = r * np.sin(t) * np.sin(p)
+    z = r * np.cos(t)
+    return x, y, z
+
+
+def xyz2sph(x, y, z, degree=True):
+    r = np.sqrt(x**2 + y**2 + z**2)
+    t = np.arccos(z / r)
+    p = np.arctan2(y, x)
+    if degree:
+        t = np.rad2deg(t)
+        p = np.rad2deg(p)
+    return r, t, p
