@@ -38,5 +38,13 @@ def mpl_tplot(var, **kwargs):
     return mpl_generate_stack(var, **kwargs)
 
 
-#
-tplot = ply_tplot
+def tplot(var, **kwargs):
+    backend = kwargs.get('backend', 'mpl')
+
+    # matplotlib
+    if backend == 'mpl' or backend == 'matplotlib':
+        return mpl_tplot(var, **kwargs)
+
+    # plotly
+    if backend == 'ply' or backend == 'plotly':
+        return ply_tplot(var, **kwargs)
