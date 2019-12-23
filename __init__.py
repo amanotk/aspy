@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-""" Tools for In-Situ Spacecraft Data Analysis
+"""Tools for In-Situ Spacecraft Data Analysis
 
 """
 

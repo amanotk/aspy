@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-""" Utilities
+"""Utilities
 
 """
 
@@ -299,6 +299,28 @@ def time_slice(var, t1, t2):
         return ret[0]
     else:
         return ret
+
+
+def to_unixtime(t):
+    tt = np.atleast_1d(t)
+    return pd.to_datetime(tt).values.astype(np.int64) * 1.0e-9
+
+
+def to_datetime64(t):
+    tt = np.atleast_1d(t)
+    return pd.to_datetime(tt).values
+
+
+def to_pydatetime(t):
+    tt = np.atleast_1d(t)
+    return pd.to_datetime(tt).to_pydatetime()
+
+
+def to_datestring(t, fmt=None):
+    tt = np.atleast_1d(t)
+    if fmt is None:
+        fmt = '%Y-%m-%d %H:%M:%S'
+    return pd.to_datetime(tt).strftime(fmt)
 
 
 def create_xarray(**data):
