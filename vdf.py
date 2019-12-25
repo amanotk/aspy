@@ -13,6 +13,16 @@ from .utils import *
 from .attrdict import AttrDict
 
 
+class VDF(object):
+    """Velocity Distribution Function Object
+    """
+    def __init__(self, dist, **kwargs):
+        self.dataset = create_dataset(dist, **kwargs)
+
+    def slice(self, time, **kwargs):
+        return slice_plane(self.dataset, time, **kwargs)
+
+
 def _extend_mesh_interp(fv, vr, vt, vp):
     # assume spherical coordinate
     r = np.concatenate([[vr[0] * 0.99], vr, [vr[-1]*1.01]])
@@ -141,10 +151,24 @@ def create_dataset(dist, **kwargs):
                              dims=['time', 'xyz'],
                              coords={'time' : fv.time, 'xyz' : np.arange(3)})
 
+    # dist error
+    disterr = kwargs.get('disterr', None)
+    if disterr is not None:
+        gv = disterr.interp(time=fv.time)
+        disterrarray = xr.DataArray(np.array(gv.values, dtype=np.float64),
+                                    name='disterr',
+                                    dims=distarray.dims,
+                                    coords=distarray.coords,
+                                    attrs=distarray.attrs)
+    else:
+        disterrarray = None
+
+
     return xr.Dataset({'dist' : distarray,
                        'bvec' : bvecarray,
                        'cvec' : cvecarray,
-                       'evec' : evecarray})
+                       'evec' : evecarray,
+                       'disterr' : disterrarray,})
 
 
 def interp(fv, vr, vt, vp, ux, uy, uz, method='nearest'):
@@ -188,37 +212,55 @@ def slice_plane(data, time, **kwargs):
     ----------
     data : xarray.Dataset
        Dataset contains distribution function and three coordiante axes
-    time : str or object that can be converted to unixtime
-       interpolation is calculated for this time snapshot
+    time : int or str or object that can be converted to unixtime
+       interpolation is calculated for the time snapshot
 
     Returns
     -------
     AttrDict object containing the result of interpolation
     """
-    tt = to_unixtime(time)
-    ds = data.sel(time=tt, method='nearest')
-    fv = ds.dist.values[0,...]
-    bb = ds.bvec.values[0,...]
-    cc = ds.cvec.values[0,...]
-    ee = ds.evec.values[0,...]
-    vr = ds.vr.values[0,...]
-    vt = ds.vt.values[0,...]
-    vp = ds.vp.values[0,...]
+    if type(time) == int:
+        ds = dta.isel(time=tt)
+    else:
+        tt = to_unixtime(time)
+        ds = data.sel(time=tt, method='nearest')
+    fv = ds.dist.values[...]
+    bb = ds.bvec.values[...]
+    cc = ds.cvec.values[...]
+    ee = ds.evec.values[...]
+    vr = ds.vr.values[...]
+    vt = ds.vt.values[...]
+    vp = ds.vp.values[...]
 
     # select velocity plane
     normdir = kwargs.get('normdir', None)
     if normdir is None:
         av, bv, cv = cc, ee, bb
         labels = ('C', 'B', )
-    elif normdir == 'c' or normdir == 'x':
+    elif normdir == 'c':
         av, bv, cv = ee, bb, cc
         labels = ('E', 'B', )
-    elif normdir == 'e' or normdir == 'y':
+    elif normdir == 'e':
         av, bv, cv = bb, cc, ee
         labels = ('B', 'C', )
-    elif normdir == 'b' or normdir == 'z':
+    elif normdir == 'b':
         av, bv, cv = cc, ee, bb
         labels = ('C', 'E', )
+    elif normdir == 'x':
+        av = np.array([0.0, 1.0, 0.0])
+        bv = np.array([0.0, 0.0, 1.0])
+        cv = np.array([1.0, 0.0, 0.0])
+        labels = ('Y', 'Z', )
+    elif normdir == 'y':
+        av = np.array([0.0, 0.0, 1.0])
+        bv = np.array([1.0, 0.0, 0.0])
+        cv = np.array([0.0, 1.0, 0.0])
+        labels = ('Z', 'X', )
+    elif normdir == 'z':
+        av = np.array([1.0, 0.0, 0.0])
+        bv = np.array([0.0, 1.0, 0.0])
+        cv = np.array([0.0, 0.0, 1.0])
+        labels = ('X', 'Y', )
     else:
         raise ValueError('Invalid input')
 
@@ -244,6 +286,38 @@ def slice_plane(data, time, **kwargs):
         'v2'       : ub,
         'v1_label' : labels[0],
         'v2_label' : labels[1],
+        'time'     : ds.dist.time.values,
     })
 
     return result
+
+
+def get_vtk(data, time):
+    # temporary function generating vtk data structure for experiment
+    from tvtk.api import tvtk
+    tt = to_unixtime(time)
+    ds = data.sel(time=tt, method='nearest')
+    fv = ds.dist.values[0,...]
+    vr = ds.vr.values[0,...]
+    vt = ds.vt.values[0,...]
+    vp = ds.vp.values[0,...]
+    f, r, t, p = _extend_mesh_interp(fv, vr, vt, vp)
+    fmax = f.max()
+    fmin = fmax * 1.0e-15
+    f  = np.clip(f[:-1,...], fmin, fmax) # eliminate zeros
+    p  = p[:-1,...]
+    rr = r[None,None,:]
+    tt = t[None,:,None]
+    pp = p[:,None,None]
+    dims = f.shape
+    mesh = np.zeros((np.prod(dims), 3), dtype=np.float64)
+    mesh[:,0] = (rr*np.sin(tt)*np.cos(pp)).ravel()
+    mesh[:,1] = (rr*np.sin(tt)*np.sin(pp)).ravel()
+    mesh[:,2] = (rr*np.cos(tt)*np.ones_like(pp)).ravel()
+    sgrid = tvtk.StructuredGrid(dimensions=dims[::-1])
+    sgrid.points = np.zeros((np.prod(dims), 3), dtype=np.float64)
+    sgrid.points = mesh
+    sgrid.point_data.scalars = np.log10(f.ravel())
+    sgrid.point_data.scalars.name = 'VDF'
+    return tvtk.to_vtk(sgrid)
+

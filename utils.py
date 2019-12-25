@@ -301,26 +301,47 @@ def time_slice(var, t1, t2):
         return ret
 
 
-def to_unixtime(t):
+def pd_to_datetime(t):
     tt = np.atleast_1d(t)
-    return pd.to_datetime(tt).values.astype(np.int64) * 1.0e-9
+    dt = tt.dtype
+    if dt.type == np.str_ or dt.type == np.string_:
+        tt = pd.to_datetime(tt)
+    elif dt == np.float32 or dt == np.float64:
+        tt = pd.to_datetime(tt, unit='s')
+    else:
+        print(dt)
+    return tt
+
+
+def to_scalar_or_array(t):
+    if np.isscalar(t):
+        return t
+    elif t.size > 1:
+        return t
+    else:
+        return t[0]
+
+
+def to_unixtime(t):
+    tt = pd_to_datetime(t).values.astype(np.int64) * 1.0e-9
+    return to_scalar_or_array(tt)
 
 
 def to_datetime64(t):
-    tt = np.atleast_1d(t)
-    return pd.to_datetime(tt).values
+    tt = pd_to_datetime(t).values
+    return to_scalar_or_array(tt)
 
 
 def to_pydatetime(t):
-    tt = np.atleast_1d(t)
-    return pd.to_datetime(tt).to_pydatetime()
+    tt = pd_to_datetime(t).to_pydatetime()
+    return to_scalar_or_array(tt)
 
 
 def to_datestring(t, fmt=None):
-    tt = np.atleast_1d(t)
     if fmt is None:
         fmt = '%Y-%m-%d %H:%M:%S'
-    return pd.to_datetime(tt).strftime(fmt)
+    tt = pd_to_datetime(t).strftime(fmt)
+    return to_scalar_or_array(tt)
 
 
 def create_xarray(**data):
