@@ -16,14 +16,17 @@ from matplotlib import pyplot as plt
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
 
-from ..utils import get_plot_option
-from ..utils import interpolate_spectrogram
+from ..utils import *
 
 
 def _get_colormap(cmap):
     if isinstance(cmap, list) and len(cmap) == 1:
         cmap = cmap[0]
     return cmap
+
+
+def get_point_size(s, dpi):
+    return s*72/dpi
 
 
 def create_colorbar_axes(axes, size=0.1, sep=0.2):
@@ -63,7 +66,7 @@ class BaseFigure(object):
         self.opt = options.copy()
         # convert size in pixel to point
         if 'dpi' in self.opt:
-            point = lambda s: s*72/self.opt['dpi']
+            point = lambda s: get_point_size(s, self.opt['dpi'])
             for v in opt_pixel_to_point:
                 if v in self.opt:
                     self.opt[v] = point(self.opt[v])
@@ -95,7 +98,7 @@ class FigureLine(BaseFigure):
         data = self.data
 
         t = data.time.values
-        x = pd.to_datetime(t, unit='s')
+        x = pd_to_datetime(t)
 
         # ensure 2D array
         if data.values.ndim == 1:
@@ -128,7 +131,8 @@ class FigureLine(BaseFigure):
         # update axes
         self.axes.set_ylabel(get_opt('ylabel', ''),
                              fontsize=self.opt['fontsize'])
-        #self.axes.set_xlim(get_opt('trange'))
+        if get_opt('trange', None) is not None:
+            self.axes.set_xlim(pd_to_datetime(get_opt('trange')))
 
         # legend
         if legend_names is not None:
@@ -172,7 +176,7 @@ class FigureSpec(BaseFigure):
         data = self.data
 
         t = data.time.values
-        x = pd.to_datetime(t, unit='s')
+        x = pd_to_datetime(t)
         y = data.coords['spec_bins'].values
         z = data.values
 
@@ -186,7 +190,8 @@ class FigureSpec(BaseFigure):
         y1 = opt['y1']
 
         if get_opt('ztype', 'linear') == 'log':
-            zz = np.log10(ma.masked_less_equal(zz, 0.0))
+            cond = np.logical_or(np.isnan(zz), np.less_equal(zz, 0.0))
+            zz = np.log10(ma.masked_where(cond, zz))
 
         # colormap and range
         zmin, zmax = get_opt('zrange', [None, None])
@@ -194,6 +199,7 @@ class FigureSpec(BaseFigure):
 
         zmin = np.floor(zz.min() if zmin is None else zmin)
         zmax = np.ceil (zz.max() if zmax is None else zmax)
+        norm = matplotlib.colors.Normalize(vmin=zmin, vmax=zmax)
 
         # plot
         x0  = mpldates.date2num(x[ 0])
@@ -203,8 +209,7 @@ class FigureSpec(BaseFigure):
             'origin'     : 'lower',
             'aspect'     : 'auto',
             'extent'     : ext,
-            'vmin'       : zmin,
-            'vmax'       : zmax,
+            'norm'       : norm,
             'cmap'       : cmap,
             'rasterized' : True,
         }
@@ -216,7 +221,8 @@ class FigureSpec(BaseFigure):
         # update axes
         self.axes.set_ylabel(get_opt('ylabel', ''),
                              fontsize=self.opt['fontsize'])
-        #self.axes.set_xlim(get_opt('trange'))
+        if get_opt('trange', None) is not None:
+            self.axes.set_xlim(pd_to_datetime(get_opt('trange')))
 
         # colorbar
         cb = plt.colorbar(im, cax=self.cbax, drawedges=False)

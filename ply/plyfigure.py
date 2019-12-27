@@ -11,8 +11,7 @@ import pandas as pd
 
 import plotly.graph_objects as go
 
-from ..utils import get_plot_option
-from ..utils import interpolate_spectrogram
+from ..utils import *
 
 
 _mpl_jet = \
@@ -160,7 +159,7 @@ class FigureLine(BaseFigure):
         else:
             scatter = go.Scatter
 
-        x = pd.to_datetime(data.time, unit='s')
+        x = pd_to_datetime(data.time)
 
         # ensure 2D array
         if data.values.ndim == 1:
@@ -202,8 +201,11 @@ class FigureLine(BaseFigure):
 
         # update axes
         xaxis = dict(font)
-        yaxis = dict(font, title_text=get_opt('ylabel'))
+        if get_opt('trange', None) is not None:
+            xaxis['range'] = pd_to_datetime(get_opt('trange'))
         self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
+
+        yaxis = dict(font, title_text=get_opt('ylabel'))
         self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
 
         # legend
@@ -223,7 +225,7 @@ class FigureSpec(BaseFigure):
                     tickfont_size=self.opt['fontsize'])
 
         t = data.time.values
-        x = pd.to_datetime(t, unit='s')
+        x = pd_to_datetime(t)
         y = data.coords['spec_bins'].values
         z = data.values
 
@@ -236,7 +238,8 @@ class FigureSpec(BaseFigure):
         yy = np.log10(opt['binc'])
 
         if get_opt('ztype', 'linear') == 'log':
-            zz = np.log10(ma.masked_less_equal(zz, 0.0))
+            cond = np.logical_or(np.isnan(zz), np.less_equal(zz, 0.0))
+            zz = np.log10(ma.masked_where(cond, zz))
 
         # colorbar
         layout = self.figure.layout
@@ -278,8 +281,11 @@ class FigureSpec(BaseFigure):
 
         # update axes
         xaxis = dict(font)
-        yaxis = dict(font, title_text=get_opt('ylabel'))
+        if get_opt('trange', None) is not None:
+            xaxis['range'] = pd_to_datetime(get_opt('trange'))
         self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
+
+        yaxis = dict(font, title_text=get_opt('ylabel'))
         self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
 
     def set_log_ticks(self, axis, dec=1):

@@ -12,12 +12,9 @@ import pandas as pd
 import matplotlib
 from matplotlib import pyplot as plt
 
-from ..utils import cast_xarray
-from ..utils import cast_list
-from ..utils import get_figure_class
-from ..utils import get_figure_layout
-from ..utils import bbox_to_rect
-from .mplfigure import FigureLine, FigureSpec, FigureAlt, FigureMap
+from ..utils import *
+from .mplfigure import \
+    FigureLine, FigureSpec, FigureAlt, FigureMap, get_point_size
 
 
 def matplotlib_change_style(params):
@@ -44,12 +41,13 @@ def generate_stack(var, **options):
 
     # get figure layout
     layout = get_figure_layout(var, **options)
+    options.update(layout)
 
     # create figure
-    dpi    = layout['dpi']
-    width  = layout['width']
-    height = layout['height']
-    bbox   = layout['bbox_relative']
+    dpi    = options['dpi']
+    width  = options['width']
+    height = options['height']
+    bbox   = options['bbox_relative']
     figure = plt.figure(dpi=dpi, figsize=(width/dpi, height/dpi))
     axs    = list()
 
@@ -73,16 +71,25 @@ def generate_stack(var, **options):
     for j in range(num_plots):
         if isinstance(var[j], xr.DataArray):
             cls = get_figure_class(var[j], classdict)
-            obj = cls(var[j], figure, axs[j], **layout)
+            obj = cls(var[j], figure, axs[j], **options)
             obj.buildfigure()
         elif hasattr(var[j], '__iter__'):
             dat = var[j]
             for k in range(len(dat)):
                 cls = get_figure_class(dat[k], classdict)
-                obj = cls(dat[k], figure, axs[j], **layout)
+                obj = cls(dat[k], figure, axs[j], **options)
                 obj.buildfigure()
-    if 'title' in layout:
-        axs[0].set_title(layout['title'], fontsize=layout['fontsize'])
+
+    if 'title' in options:
+        fontsize = get_point_size(options['fontsize'], options['dpi'])
+        title = {
+            'label'    : options['title'],
+            'pad'      : fontsize,
+            'fontdict' : dict(fontsize=fontsize),
+        }
+        axs[0].set_title(**title)
+    if 'trange' in options:
+        axs[0].set_xlim(pd_to_datetime(options['trange']))
 
     # restore
     style = matplotlib_change_style(style)

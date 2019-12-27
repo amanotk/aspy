@@ -41,10 +41,12 @@ def mpl_tplot(var, **kwargs):
 def tplot(var, **kwargs):
     backend = kwargs.get('backend', 'mpl')
 
-    # matplotlib
     if backend == 'mpl' or backend == 'matplotlib':
+        # matplotlib
         return mpl_tplot(var, **kwargs)
-
-    # plotly
-    if backend == 'ply' or backend == 'plotly':
+    elif backend == 'ply' or backend == 'plotly':
+        # plotly
         return ply_tplot(var, **kwargs)
+    else:
+        raise ValueError('Unknown backend: %s' % (backend,))
+        return None

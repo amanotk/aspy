@@ -309,7 +309,7 @@ def pd_to_datetime(t):
     elif dt == np.float32 or dt == np.float64:
         tt = pd.to_datetime(tt, unit='s')
     else:
-        print(dt)
+        raise ValueError('Unrecognized time format : ', dt)
     return tt
 
 

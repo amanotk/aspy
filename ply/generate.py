@@ -12,11 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from ..utils import is_ipython
-from ..utils import cast_xarray
-from ..utils import cast_list
-from ..utils import get_figure_class
-from ..utils import get_figure_layout
+from ..utils import *
 from .plyfigure import FigureLine, FigureSpec, FigureAlt, FigureMap
 
 
@@ -32,14 +28,15 @@ def generate_stack(var, **options):
 
     # get figure layout
     layout = get_figure_layout(var, **options)
+    options.update(layout)
 
     # create figure
     figure_layout = {
-        'width'    : layout['width'],
-        'height'   : layout['height'],
+        'width'    : options['width'],
+        'height'   : options['height'],
         'margin'   : dict(t=0, b=0, l=0, r=0, pad=0, autoexpand=False),
     }
-    bbox = layout['bbox_relative']
+    bbox = options['bbox_relative']
 
     num_plots = len(var)
     for j in range(num_plots):
@@ -68,14 +65,28 @@ def generate_stack(var, **options):
     for j in range(num_plots):
         if isinstance(var[j], xr.DataArray):
             cls = get_figure_class(var[j], classdict)
-            obj = cls(var[j], figure, axs[j], **layout)
+            obj = cls(var[j], figure, axs[j], **options)
             obj.buildfigure()
         elif hasattr(var[j], '__iter__'):
             dat = var[j]
             for k in range(len(dat)):
                 cls = get_figure_class(dat[k], classdict)
-                obj = cls(dat[k], figure, axs[j], **layout)
+                obj = cls(dat[k], figure, axs[j], **options)
                 obj.buildfigure()
+
+    if 'title' in options:
+        title = {
+            'text'      : options['title'],
+            'font_size' : options['fontsize'],
+            'x'         : 0.5,
+            'y'         : figure.layout.yaxis.domain[1] * 1.01,
+            'xanchor'   : 'center',
+            'yanchor'   : 'bottom',
+        }
+        print(title)
+        figure.update_layout(title=title)
+    if 'trange' in options:
+        figure.update_xaxes(range=pd_to_datetime(options['trange']))
 
     if is_ipython():
         figure.show()
