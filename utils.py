@@ -360,7 +360,6 @@ def create_xarray(**data):
                 'axis_label' : 'Z',
                 'z_axis_type' : 'linear',
             },
-            'trange' : [0.0, 1.0],
             'extras' : {
                 'spec' : 0,
                 'colormap' : ['viridis'],

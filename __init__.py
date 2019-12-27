@@ -21,6 +21,7 @@ from .tplot2netcdf import load as ncload
 from .attrdict import AttrDict
 
 const = AttrDict( {
+    'c'   : constants.speed_of_light,
     'qme' : constants.e / constants.electron_mass,
     'qmp' : constants.e / constants.proton_mass,
     'me'  : constants.electron_mass,

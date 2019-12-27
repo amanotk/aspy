@@ -121,6 +121,8 @@ class BaseFigure(object):
     def setup_options(self, options):
         self.webgl = options.get('use_webgl', False)
         self.opt = options.copy()
+        if not 'primary' in self.opt:
+            self.opt['primary'] = False
 
     def setup_default_axes(self):
         xaxis = dict(
@@ -142,16 +144,18 @@ class BaseFigure(object):
         self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
         self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
 
+    def get_opt(self, key, val=None):
+        return get_plot_option(self.data, key, val)
+
     def buildfigure(self):
         pass
 
+    def update_axes(self):
+        pass
 
 class FigureLine(BaseFigure):
     def buildfigure(self):
-        get_opt = lambda key, val=None: get_plot_option(self.data, key, val)
         data = self.data
-        font = dict(titlefont_size=self.opt['fontsize'],
-                    tickfont_size=self.opt['fontsize'])
 
         # use WebGL version or not
         if self.webgl:
@@ -170,14 +174,14 @@ class FigureLine(BaseFigure):
             print('Error: input must be either 1D or 2D array')
             return None
 
-        legend_names = get_opt('legend')
+        legend_names = self.get_opt('legend')
         layout = self.figure.layout
         legend = list()
         N = y.shape[1]
         for i in range(N):
             # line options
             lopt = dict(line_width=self.opt['linewidth'])
-            lc = get_opt('line_color')
+            lc = self.get_opt('line_color')
             if lc is not None and len(lc) == N:
                 lopt['line_color'] = _convert_color(lc[i])
             else:
@@ -200,13 +204,7 @@ class FigureLine(BaseFigure):
             self.figure.add_trace(plot)
 
         # update axes
-        xaxis = dict(font)
-        if get_opt('trange', None) is not None:
-            xaxis['range'] = pd_to_datetime(get_opt('trange'))
-        self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
-
-        yaxis = dict(font, title_text=get_opt('ylabel'))
-        self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
+        self.update_axes()
 
         # legend
         text = list(layout.annotations)
@@ -216,10 +214,26 @@ class FigureLine(BaseFigure):
             line.append(l.get_line())
         self.figure.update_layout(annotations=text, shapes=line)
 
+    def update_axes(self):
+        if not self.opt['primary']:
+            return
+
+        font = dict(titlefont_size=self.opt['fontsize'],
+                    tickfont_size=self.opt['fontsize'])
+
+        xaxis = dict(font)
+        if self.get_opt('trange', None) is not None:
+            xaxis['range'] = pd_to_datetime(self.get_opt('trange'))
+        self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
+
+        yaxis = dict(font, title_text=self.get_opt('ylabel'))
+        if self.get_opt('yrange', None) is not None:
+            yaxis['range'] = self.get_opt('yrange')
+        self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
+
 
 class FigureSpec(BaseFigure):
     def buildfigure(self):
-        get_opt = lambda key, val=None: get_plot_option(self.data, key, val)
         data = self.data
         font = dict(titlefont_size=self.opt['fontsize'],
                     tickfont_size=self.opt['fontsize'])
@@ -229,7 +243,7 @@ class FigureSpec(BaseFigure):
         y = data.coords['spec_bins'].values
         z = data.values
 
-        if get_opt('ytype', 'linear') == 'log':
+        if self.get_opt('ytype', 'linear') == 'log':
             ylog = True
             self.set_log_ticks(self.axes['yaxis'])
         else:
@@ -237,7 +251,7 @@ class FigureSpec(BaseFigure):
         zz, opt = interpolate_spectrogram(y, z, ylog=ylog)
         yy = np.log10(opt['binc'])
 
-        if get_opt('ztype', 'linear') == 'log':
+        if self.get_opt('ztype', 'linear') == 'log':
             cond = np.logical_or(np.isnan(zz), np.less_equal(zz, 0.0))
             zz = np.log10(ma.masked_where(cond, zz))
 
@@ -257,13 +271,13 @@ class FigureSpec(BaseFigure):
                   thickness=xlen, thicknessmode='pixels',
                   len=ylen, lenmode='fraction',
                   outlinewidth=self.opt['linewidth'],
-                  title=get_opt('zlabel'),
+                  title=self.get_opt('zlabel'),
                   titleside='right',
                   ticks='outside')
 
         # colormap and range
-        zmin, zmax = get_opt('zrange', [None, None])
-        cmap = _get_colormap(get_opt('colormap'))
+        zmin, zmax = self.get_opt('zrange', [None, None])
+        cmap = _get_colormap(self.get_opt('colormap'))
 
         zmin = np.floor(zz.min() if zmin is None else zmin)
         zmax = np.ceil (zz.max() if zmax is None else zmax)
@@ -280,19 +294,34 @@ class FigureSpec(BaseFigure):
         self.figure.add_trace(hm)
 
         # update axes
-        xaxis = dict(font)
-        if get_opt('trange', None) is not None:
-            xaxis['range'] = pd_to_datetime(get_opt('trange'))
-        self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
-
-        yaxis = dict(font, title_text=get_opt('ylabel'))
-        self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
+        self.update_axes()
 
     def set_log_ticks(self, axis, dec=1):
         opt = dict(tickprefix='10<sup>',
                    ticksuffix='</sup>',
                    tickformat='d')
         self.figure.update_yaxes(**opt, selector=axis)
+
+    def update_axes(self):
+        if not self.opt['primary']:
+            return
+
+        font = dict(titlefont_size=self.opt['fontsize'],
+                    tickfont_size=self.opt['fontsize'])
+
+        xaxis = dict(font)
+        if self.get_opt('trange', None) is not None:
+            xaxis['range'] = pd_to_datetime(self.get_opt('trange'))
+        self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
+
+        yaxis = dict(font, title_text=self.get_opt('ylabel'))
+        if self.get_opt('yrange', None) is not None:
+            if self.get_opt('ytype', 'linear') == 'log':
+                yrange = [np.log10(yr) for yr in self.get_opt('yrange')]
+            else:
+                yrange = self.get_opt('yrange')
+            yaxis['range'] = yrange
+        self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
 
 
 class FigureAlt(BaseFigure):

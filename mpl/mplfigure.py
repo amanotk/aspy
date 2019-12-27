@@ -70,6 +70,8 @@ class BaseFigure(object):
             for v in opt_pixel_to_point:
                 if v in self.opt:
                     self.opt[v] = point(self.opt[v])
+        if not 'primary' in self.opt:
+            self.opt['primary'] = False
 
     def setup_default_axes(self):
         # tick options
@@ -88,13 +90,18 @@ class BaseFigure(object):
         for axis in ['top','bottom','left','right']:
             self.axes.spines[axis].set_linewidth(self.opt['linewidth'])
 
+    def get_opt(self, key, val=None):
+        return get_plot_option(self.data, key, val)
+
     def buildfigure(self):
+        pass
+
+    def update_axes(self):
         pass
 
 
 class FigureLine(BaseFigure):
     def buildfigure(self):
-        get_opt = lambda key, val=None: get_plot_option(self.data, key, val)
         data = self.data
 
         t = data.time.values
@@ -109,7 +116,7 @@ class FigureLine(BaseFigure):
             print('Error: input must be either 1D or 2D array')
             return None
 
-        legend_names = get_opt('legend')
+        legend_names = self.get_opt('legend')
         N = y.shape[1]
         for i in range(N):
             # line options
@@ -117,7 +124,7 @@ class FigureLine(BaseFigure):
                 'linewidth' : self.opt['linewidth'],
                 'linestyle' : 'solid',
             }
-            lc = get_opt('line_color')
+            lc = self.get_opt('line_color')
             if lc is not None and len(lc) == N:
                 opt['color'] = lc[i]
             else:
@@ -129,10 +136,7 @@ class FigureLine(BaseFigure):
             plot = self.axes.plot(x, y[:,i], **opt)
 
         # update axes
-        self.axes.set_ylabel(get_opt('ylabel', ''),
-                             fontsize=self.opt['fontsize'])
-        if get_opt('trange', None) is not None:
-            self.axes.set_xlim(pd_to_datetime(get_opt('trange')))
+        self.update_axes()
 
         # legend
         if legend_names is not None:
@@ -144,6 +148,18 @@ class FigureLine(BaseFigure):
                 'fontsize'       : self.opt['fontsize'],
             }
             self.axes.legend(**legend_opt)
+
+    def update_axes(self):
+        if not self.opt['primary']:
+            return
+
+        if self.get_opt('trange', None) is not None:
+            self.axes.set_xlim(pd_to_datetime(self.get_opt('trange')))
+
+        if self.get_opt('yrange', None) is not None:
+            self.axes.set_ylim(self.get_opt('yrange'))
+        self.axes.set_ylabel(self.get_opt('ylabel', ''),
+                             fontsize=self.opt['fontsize'])
 
 
 class FigureSpec(BaseFigure):
@@ -172,7 +188,6 @@ class FigureSpec(BaseFigure):
                 ax.spines[axis].set_linewidth(self.opt['linewidth'])
 
     def buildfigure(self):
-        get_opt = lambda key, val=None: get_plot_option(self.data, key, val)
         data = self.data
 
         t = data.time.values
@@ -180,7 +195,7 @@ class FigureSpec(BaseFigure):
         y = data.coords['spec_bins'].values
         z = data.values
 
-        if get_opt('ytype', 'linear') == 'log':
+        if self.get_opt('ytype', 'linear') == 'log':
             ylog = True
             self.set_log_ticks(self.axes.yaxis)
         else:
@@ -189,13 +204,13 @@ class FigureSpec(BaseFigure):
         y0 = opt['y0']
         y1 = opt['y1']
 
-        if get_opt('ztype', 'linear') == 'log':
+        if self.get_opt('ztype', 'linear') == 'log':
             cond = np.logical_or(np.isnan(zz), np.less_equal(zz, 0.0))
             zz = np.log10(ma.masked_where(cond, zz))
 
         # colormap and range
-        zmin, zmax = get_opt('zrange', [None, None])
-        cmap = _get_colormap(get_opt('colormap'))
+        zmin, zmax = self.get_opt('zrange', [None, None])
+        cmap = _get_colormap(self.get_opt('colormap'))
 
         zmin = np.floor(zz.min() if zmin is None else zmin)
         zmax = np.ceil (zz.max() if zmax is None else zmax)
@@ -219,15 +234,12 @@ class FigureSpec(BaseFigure):
         self.axes.xaxis_date()
 
         # update axes
-        self.axes.set_ylabel(get_opt('ylabel', ''),
-                             fontsize=self.opt['fontsize'])
-        if get_opt('trange', None) is not None:
-            self.axes.set_xlim(pd_to_datetime(get_opt('trange')))
+        self.update_axes()
 
         # colorbar
         cb = plt.colorbar(im, cax=self.cbax, drawedges=False)
         cb.outline.set_linewidth(self.opt['linewidth'])
-        self.cbax.set_ylabel(get_opt('zlabel', ''),
+        self.cbax.set_ylabel(self.get_opt('zlabel', ''),
                              fontsize=self.opt['fontsize'])
 
     def set_log_ticks(self, axis, dec=1):
@@ -236,6 +248,22 @@ class FigureSpec(BaseFigure):
         formatter = matplotlib.ticker.FuncFormatter(f)
         axis.set_major_locator(majorloc)
         axis.set_major_formatter(formatter)
+
+    def update_axes(self):
+        if not self.opt['primary']:
+            return
+
+        if self.get_opt('trange', None) is not None:
+            self.axes.set_xlim(pd_to_datetime(self.get_opt('trange')))
+
+        if self.get_opt('yrange', None) is not None:
+            if self.get_opt('ytype', 'linear') == 'log':
+                yrange = [np.log10(yr) for yr in self.get_opt('yrange')]
+            else:
+                yrange = self.get_opt('yrange')
+            self.axes.set_ylim(yrange)
+        self.axes.set_ylabel(self.get_opt('ylabel', ''),
+                             fontsize=self.opt['fontsize'])
 
 
 class FigureAlt(BaseFigure):

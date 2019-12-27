@@ -207,7 +207,7 @@ def spectrogram(x, fs, nperseg, noverlap=None, window='blackman'):
         # set attribute
         data.attrs = _default_attrs_spectrogram()
         set_plot_option(data,
-                        yrange=[f[0], f[-1]],
+                        yrange=[f[0,0], f[0,-1]],
                         trange=[t[0], t[-1]],
                         z_type='log',
                         colormap='viridis')
