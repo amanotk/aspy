@@ -271,14 +271,13 @@ def interpolate_spectrogram(ybin, data, **kwargs):
     else:
         raise ValueError('Invalid input')
 
-    # interpolation points
+    # bin centers and edges
     my = 2*ny
     if 'ylog' in kwargs and kwargs['ylog']:
-        bine = np.logspace(np.log10(y0), np.log10(y1), my+1)
+        binc = np.logspace(np.log10(y0), np.log10(y1), my)
     else:
-        print('error')
-        bine = np.linspace(y0, y1, my+1)
-    binc = 0.5*(bine[+1:] + bine[:-1])
+        binc = np.linspace(y0, y1, my)
+    bine = np.concatenate([binc[:+1], 0.5*(binc[+1:] + binc[:-1]), binc[-1:]])
 
     zz = np.zeros((nx, my), np.float64)
     for ii in range(nx):

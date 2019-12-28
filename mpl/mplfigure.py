@@ -194,17 +194,11 @@ class FigureSpec(BaseFigure):
         x = pd_to_datetime(t)
         y = data.coords['spec_bins'].values
         z = data.values
+        ylog = self.get_opt('ytype', 'linear') == 'log'
+        zlog = self.get_opt('ztype', 'linear') == 'log'
 
-        if self.get_opt('ytype', 'linear') == 'log':
-            ylog = True
-            self.set_log_ticks(self.axes.yaxis)
-        else:
-            ylog = False
         zz, opt = interpolate_spectrogram(y, z, ylog=ylog)
-        y0 = opt['y0']
-        y1 = opt['y1']
-
-        if self.get_opt('ztype', 'linear') == 'log':
+        if zlog:
             cond = np.logical_or(np.isnan(zz), np.less_equal(zz, 0.0))
             zz = np.log10(ma.masked_where(cond, zz))
 
@@ -217,21 +211,16 @@ class FigureSpec(BaseFigure):
         norm = matplotlib.colors.Normalize(vmin=zmin, vmax=zmax)
 
         # plot
-        x0  = mpldates.date2num(x[ 0])
-        x1  = mpldates.date2num(x[-1])
-        ext = [x0, x1, np.log10(y0), np.log10(y1)]
-        opt_imshow = {
-            'origin'     : 'lower',
-            'aspect'     : 'auto',
-            'extent'     : ext,
+        x0 = mpldates.date2num(x[ 0] - 0.5*(x[+1] - x[ 0]))
+        x1 = mpldates.date2num(x[-1] + 0.5*(x[-1] - x[-2]))
+        xx = np.linspace(x0, x1, zz.shape[0]+1)
+        yy = opt['bine']
+        opt_pcolormesh = {
             'norm'       : norm,
             'cmap'       : cmap,
             'rasterized' : True,
         }
-        im = self.axes.imshow(zz.T, **opt_imshow)
-        self.axes.set_xlim(ext[0], ext[1])
-        self.axes.set_ylim(ext[2], ext[3])
-        self.axes.xaxis_date()
+        im = self.axes.pcolormesh(xx, yy, zz.T, **opt_pcolormesh)
 
         # update axes
         self.update_axes()
@@ -255,13 +244,14 @@ class FigureSpec(BaseFigure):
 
         if self.get_opt('trange', None) is not None:
             self.axes.set_xlim(pd_to_datetime(self.get_opt('trange')))
+            self.axes.xaxis_date()
 
         if self.get_opt('yrange', None) is not None:
-            if self.get_opt('ytype', 'linear') == 'log':
-                yrange = [np.log10(yr) for yr in self.get_opt('yrange')]
-            else:
-                yrange = self.get_opt('yrange')
+            yrange = self.get_opt('yrange')
             self.axes.set_ylim(yrange)
+        if self.get_opt('ytype', 'linear') == 'log':
+            self.axes.set_yscale('log')
+
         self.axes.set_ylabel(self.get_opt('ylabel', ''),
                              fontsize=self.opt['fontsize'])
 

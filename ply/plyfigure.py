@@ -239,19 +239,13 @@ class FigureSpec(BaseFigure):
                     tickfont_size=self.opt['fontsize'])
 
         t = data.time.values
-        x = pd_to_datetime(t)
         y = data.coords['spec_bins'].values
         z = data.values
+        ylog = self.get_opt('ytype', 'linear') == 'log'
+        zlog = self.get_opt('ztype', 'linear') == 'log'
 
-        if self.get_opt('ytype', 'linear') == 'log':
-            ylog = True
-            self.set_log_ticks(self.axes['yaxis'])
-        else:
-            ylog = False
         zz, opt = interpolate_spectrogram(y, z, ylog=ylog)
-        yy = np.log10(opt['binc'])
-
-        if self.get_opt('ztype', 'linear') == 'log':
+        if zlog:
             cond = np.logical_or(np.isnan(zz), np.less_equal(zz, 0.0))
             zz = np.log10(ma.masked_where(cond, zz))
 
@@ -283,6 +277,12 @@ class FigureSpec(BaseFigure):
         zmax = np.ceil (zz.max() if zmax is None else zmax)
 
         # heatmap
+        t0 = t[ 0] - 0.5*(t[+1] - t[ 0])
+        t1 = t[-1] + 0.5*(t[-1] - t[-2])
+        tt = np.linspace(t0, t1, zz.shape[0]+1)
+        xx = pd_to_datetime(tt)
+        yy = opt['bine']
+
         opt = dict(name='',
                    xaxis=self.axes['x'],
                    yaxis=self.axes['y'],
@@ -290,7 +290,7 @@ class FigureSpec(BaseFigure):
                    colorbar=cb,
                    zmin=zmin,
                    zmax=zmax)
-        hm = go.Heatmap(z=zz.T.filled(-np.inf), x=x, y=yy, **opt)
+        hm = go.Heatmap(z=zz.T.filled(-np.inf), x=xx, y=yy, **opt)
         self.figure.add_trace(hm)
 
         # update axes
@@ -315,12 +315,13 @@ class FigureSpec(BaseFigure):
         self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
 
         yaxis = dict(font, title_text=self.get_opt('ylabel'))
-        if self.get_opt('yrange', None) is not None:
-            if self.get_opt('ytype', 'linear') == 'log':
-                yrange = [np.log10(yr) for yr in self.get_opt('yrange')]
-            else:
-                yrange = self.get_opt('yrange')
-            yaxis['range'] = yrange
+        if self.get_opt('ytype', 'linear') == 'log':
+            yaxis['type'] = 'log'
+            if self.get_opt('yrange', None) is not None:
+                yaxis['range'] = [np.log10(yr) for yr in self.get_opt('yrange')]
+        else:
+            if self.get_opt('yrange', None) is not None:
+                yaxis['range'] = self.get_opt('yrange')
         self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
 
 
