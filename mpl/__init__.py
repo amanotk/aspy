@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-""" Generate stack of plots
+"""Plot Module via Matplotlib
 
 """
 
@@ -17,7 +17,7 @@ from .mplfigure import \
     FigureLine, FigureSpec, FigureAlt, FigureMap, get_point_size
 
 
-def matplotlib_change_style(params):
+def _matplotlib_change_style(params):
     current = matplotlib.rcParams.copy()
     params  = params.copy()
     if 'backend' in params:
@@ -35,7 +35,7 @@ def generate_stack(var, **options):
     }
 
     # use deafult matplotlib style
-    style = matplotlib_change_style(matplotlib.rcParamsDefault)
+    style = _matplotlib_change_style(matplotlib.rcParamsDefault)
 
     var = cast_list(cast_xarray(var))
 
@@ -92,7 +92,7 @@ def generate_stack(var, **options):
         axs[0].set_xlim(pd_to_datetime(options['trange']))
 
     # restore
-    style = matplotlib_change_style(style)
+    style = _matplotlib_change_style(style)
 
     plt.show()
     return figure

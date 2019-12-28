@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-""" Generate stack of plots
+"""Plot Module via Plotly
 
 """
 

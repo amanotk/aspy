@@ -13,8 +13,8 @@ import pandas as pd
 import xarray as xr
 
 from .utils import *
-from .ply.generate import generate_stack as ply_generate_stack
-from .mpl.generate import generate_stack as mpl_generate_stack
+from .ply import generate_stack as ply_generate_stack
+from .mpl import generate_stack as mpl_generate_stack
 from .tplot2netcdf import save as ncsave
 from .tplot2netcdf import load as ncload
 
