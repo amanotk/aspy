@@ -147,6 +147,24 @@ class BaseFigure(object):
     def get_opt(self, key, val=None):
         return get_plot_option(self.data, key, val)
 
+    def set_ylog_options(self, tickvals):
+        tick1 = np.ceil(np.log10(tickvals))
+        tick2 = np.floor(np.log10(tickvals))
+        ticks = np.sort(np.unique(np.array(np.concatenate([tick1, tick2]),
+                                           dtype=np.int32)))
+        nt = len(ticks)
+        tickvals = [0]*nt
+        ticktext = [0]*nt
+        for i in range(nt):
+            tickvals[i] = 10.0**ticks[i]
+            ticktext[i] = '10<sup>%+d</sup>' % (ticks[i])
+        opt = {
+            'type' : 'log',
+            'tickvals' : tickvals,
+            'ticktext' : ticktext,
+        }
+        return opt
+
     def buildfigure(self):
         pass
 
@@ -292,15 +310,10 @@ class FigureSpec(BaseFigure):
                    zmax=zmax)
         hm = go.Heatmap(z=zz.T.filled(-np.inf), x=xx, y=yy, **opt)
         self.figure.add_trace(hm)
+        self.plotdata = dict(x=xx, y=yy, z=zz)
 
         # update axes
         self.update_axes()
-
-    def set_log_ticks(self, axis, dec=1):
-        opt = dict(tickprefix='10<sup>',
-                   ticksuffix='</sup>',
-                   tickformat='d')
-        self.figure.update_yaxes(**opt, selector=axis)
 
     def update_axes(self):
         if not self.opt['primary']:
@@ -316,12 +329,24 @@ class FigureSpec(BaseFigure):
 
         yaxis = dict(font, title_text=self.get_opt('ylabel'))
         if self.get_opt('ytype', 'linear') == 'log':
-            yaxis['type'] = 'log'
+            # log scale in y
             if self.get_opt('yrange', None) is not None:
-                yaxis['range'] = [np.log10(yr) for yr in self.get_opt('yrange')]
+                yrange = [np.log10(yr) for yr in self.get_opt('yrange')]
+            else:
+                y = self.plotdata['y']
+                yrange = [np.log10(y.min()), np.log10(y.max())]
+            # ticks
+            ylogmin = int(np.ceil(yrange[0]))
+            ylogmax = int(np.floor(yrange[1]))
+            ticks   = 10**np.arange(ylogmin, ylogmax+1)
+            yaxis['range'] = yrange
+            yaxis.update(self.set_ylog_options(ticks))
         else:
+            # linear scale in y
             if self.get_opt('yrange', None) is not None:
                 yaxis['range'] = self.get_opt('yrange')
+            else:
+                yaxis['range'] = [y.min(), y.max()]
         self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
 
 
