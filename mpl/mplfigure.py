@@ -85,8 +85,10 @@ class BaseFigure(object):
             'left'      : True,
             'right'     : True,
         }
-        self.axes.xaxis.set_tick_params(**opt)
-        self.axes.yaxis.set_tick_params(**opt)
+        self.axes.tick_params(axis='x', which='major', **opt)
+        self.axes.tick_params(axis='y', which='major', **opt)
+        self.axes.tick_params(axis='x', which='minor', length=0, width=0)
+        self.axes.tick_params(axis='y', which='minor', length=0, width=0)
         for axis in ['top','bottom','left','right']:
             self.axes.spines[axis].set_linewidth(self.opt['line_width'])
 
@@ -254,6 +256,10 @@ class FigureSpec(BaseFigure):
 
         self.axes.set_ylabel(self.get_opt('ylabel', ''),
                              fontsize=self.opt['fontsize'])
+
+        # TODO: minor ticks
+        self.axes.tick_params(axis='x', which='minor', length=0, width=0)
+        self.axes.tick_params(axis='y', which='minor', length=0, width=0)
 
 
 class FigureAlt(BaseFigure):
