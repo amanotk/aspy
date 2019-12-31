@@ -80,34 +80,17 @@ def _get_colormap(cmap):
     return cmap
 
 
-class Legend(object):
-    def __init__(self, label, xpos, ypos, size, opts):
-        self.label = label
-        self.xpos = xpos
-        self.ypos = ypos
-        self.size = size
-        self.opts = opts
-        self._build()
+def _get_legend_label(x, y, text, **opts):
+    r = go.layout.Annotation(x=x, y=y, text=text, showarrow=False,
+                             xref='paper', yref='paper',
+                             xanchor='left', yanchor='middle', **opts)
+    return r
 
-    def _build(self):
-        x0 = self.xpos
-        y0 = self.ypos
-        x1 = self.xpos+0.02
-        y1 = self.ypos
-        x2 = self.xpos+0.02
-        y2 = self.ypos
-        self.line = go.layout.Shape(
-            type='line', x0=x0, x1=x1, y0=y0, y1=y1, xref='paper', yref='paper',
-            **self.opts)
-        self.text = go.layout.Annotation(font_size=self.size,
-            text=self.label, x=x2, y=y2, xref='paper', yref='paper',
-            xanchor='left', yanchor='middle', showarrow=False)
 
-    def get_line(self):
-        return self.line
-
-    def get_text(self):
-        return self.text
+def _get_legend_line(x0, y0, x1, y1, **opts):
+    r = go.layout.Shape(type='line', x0=x0, x1=x1, y0=y0, y1=y1,
+                        xref='paper', yref='paper', **opts)
+    return r
 
 
 class BaseFigure(object):
@@ -121,12 +104,12 @@ class BaseFigure(object):
     def setup_options(self, options):
         self.webgl = options.get('use_webgl', False)
         self.opt = options.copy()
-        if not 'primary' in self.opt:
-            self.opt['primary'] = False
+        self.opt['numplot'] = self.opt.get('numplot', 0)
+        self.opt['numaxes'] = self.opt.get('numaxes', 0)
 
     def setup_default_axes(self):
         xaxis = dict(
-            linewidth=self.opt['linewidth'],
+            linewidth=self.opt['line_width'],
             linecolor='#000',
             ticks='outside',
             mirror='allticks',
@@ -134,7 +117,7 @@ class BaseFigure(object):
             showticklabels=True,
         )
         yaxis = dict(
-            linewidth=self.opt['linewidth'],
+            linewidth=self.opt['line_width'],
             linecolor='#000',
             ticks='outside',
             mirror='allticks',
@@ -165,11 +148,39 @@ class BaseFigure(object):
         }
         return opt
 
+    def add_legend(self, label, line):
+        # for the first legend
+        na   = self.opt['numaxes']
+        if self.figure._legend[na] is None:
+            self.figure._legend[na] = []
+
+        nl = len(self.figure._legend[na])
+        ts = self.opt['ticklength']/self.opt['width']
+        fs = self.opt['fontsize']/self.opt['width']
+        xx = self.axes['xaxis']['domain'][1] + 2.0*ts
+        yy = self.axes['yaxis']['domain'][1] - 0.5*fs
+        x0 = xx
+        y0 = yy - nl*fs
+        x1 = x0 + 2.0*fs
+        y1 = y0
+        x2 = x1 + 0.5*fs
+        y2 = y1
+        r1 = _get_legend_line(x0, y0, x1, y1, **line)
+        r2 = _get_legend_label(x2, y2, **label)
+        self.figure._legend[na].append(dict(line=r1, label=r2))
+        # render
+        line = list(self.figure.layout.shapes)
+        text = list(self.figure.layout.annotations)
+        line.append(r1)
+        text.append(r2)
+        self.figure.update_layout(annotations=text, shapes=line)
+
     def buildfigure(self):
         pass
 
     def update_axes(self):
         pass
+
 
 class FigureLine(BaseFigure):
     def buildfigure(self):
@@ -198,7 +209,7 @@ class FigureLine(BaseFigure):
         N = y.shape[1]
         for i in range(N):
             # line options
-            lopt = dict(line_width=self.opt['linewidth'])
+            lopt = dict(line_width=self.opt['line_width'])
             lc = self.get_opt('line_color')
             if lc is not None and len(lc) == N:
                 lopt['line_color'] = _convert_color(lc[i])
@@ -209,13 +220,11 @@ class FigureLine(BaseFigure):
                        yaxis=self.axes['y'],
                        showlegend=False)
             if legend_names is not None:
-                size = self.opt['fontsize']
-                xdom = self.axes['xaxis']['domain']
-                ydom = self.axes['yaxis']['domain']
-                xpos = xdom[1] + 2*self.opt['ticklength']/self.opt['width']
-                ypos = ydom[1] - (i + 0.5)*size/self.opt['width']
-                legend.append(Legend(legend_names[i], xpos, ypos, size, lopt))
-                opt['name'] = legend_names[i]
+                label = {
+                    'text'      : legend_names[i],
+                    'font_size' : self.opt['fontsize'],
+                }
+                self.add_legend(label, lopt)
             # plot
             opt.update(lopt)
             plot = scatter(x=x, y=y[:,i], mode='lines', **opt)
@@ -224,16 +233,8 @@ class FigureLine(BaseFigure):
         # update axes
         self.update_axes()
 
-        # legend
-        text = list(layout.annotations)
-        line = list(layout.shapes)
-        for l in legend:
-            text.append(l.get_text())
-            line.append(l.get_line())
-        self.figure.update_layout(annotations=text, shapes=line)
-
     def update_axes(self):
-        if not self.opt['primary']:
+        if self.opt['numplot'] != 0:
             return
 
         font = dict(titlefont_size=self.opt['fontsize'],
@@ -282,7 +283,7 @@ class FigureSpec(BaseFigure):
                   x=xpos, y=ypos, xpad=xpad, ypad=ypad, yanchor='bottom',
                   thickness=xlen, thicknessmode='pixels',
                   len=ylen, lenmode='fraction',
-                  outlinewidth=self.opt['linewidth'],
+                  outlinewidth=self.opt['line_width'],
                   title=self.get_opt('zlabel'),
                   titleside='right',
                   ticks='outside')
@@ -316,7 +317,7 @@ class FigureSpec(BaseFigure):
         self.update_axes()
 
     def update_axes(self):
-        if not self.opt['primary']:
+        if self.opt['numplot'] != 0:
             return
 
         font = dict(titlefont_size=self.opt['fontsize'],

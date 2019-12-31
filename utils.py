@@ -25,7 +25,7 @@ default_layout = {
     'margin_bottom' : 80,
     'margin_left'   : 100,
     'margin_right'  : 140,
-    'linewidth'     : 1,
+    'line_width'    : 1,
     'fontsize'      : 12,
     'labelsize'     : 12,
     'ticklength'    : 6,

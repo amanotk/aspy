@@ -50,6 +50,7 @@ def generate_stack(var, **options):
         figure_layout['yaxis' + jj] = dict(domain=[y0, y1])
 
     figure = go.Figure(layout=figure_layout)
+    figure.__dict__['_legend'] = [None]*num_plots # hack !
 
     # store axes
     axs = list()
@@ -65,13 +66,15 @@ def generate_stack(var, **options):
     for j in range(num_plots):
         if isinstance(var[j], xr.DataArray):
             cls = get_figure_class(var[j], classdict)
-            obj = cls(var[j], figure, axs[j], primary=True, **options)
+            obj = cls(var[j], figure, axs[j],
+                      numaxes=j, numplot=0, **options)
             obj.buildfigure()
         elif hasattr(var[j], '__iter__'):
             dat = var[j]
             for k in range(len(dat)):
                 cls = get_figure_class(dat[k], classdict)
-                obj = cls(dat[k], figure, axs[j], primary=(k==0), **options)
+                obj = cls(dat[k], figure, axs[j],
+                          numaxes=j, numplot=k, **options)
                 obj.buildfigure()
 
     if 'title' in options:

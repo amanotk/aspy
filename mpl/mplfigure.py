@@ -54,7 +54,7 @@ class BaseFigure(object):
         opt_pixel_to_point = [
             'width',
             'height',
-            'linewidth',
+            'line_width',
             'fontsize',
             'labelsize',
             'ticklength',
@@ -70,8 +70,8 @@ class BaseFigure(object):
             for v in opt_pixel_to_point:
                 if v in self.opt:
                     self.opt[v] = point(self.opt[v])
-        if not 'primary' in self.opt:
-            self.opt['primary'] = False
+        self.opt['numplot'] = self.opt.get('numplot', 0)
+        self.opt['numaxes'] = self.opt.get('numaxes', 0)
 
     def setup_default_axes(self):
         # tick options
@@ -88,7 +88,7 @@ class BaseFigure(object):
         self.axes.xaxis.set_tick_params(**opt)
         self.axes.yaxis.set_tick_params(**opt)
         for axis in ['top','bottom','left','right']:
-            self.axes.spines[axis].set_linewidth(self.opt['linewidth'])
+            self.axes.spines[axis].set_linewidth(self.opt['line_width'])
 
     def get_opt(self, key, val=None):
         return get_plot_option(self.data, key, val)
@@ -121,7 +121,7 @@ class FigureLine(BaseFigure):
         for i in range(N):
             # line options
             opt = {
-                'linewidth' : self.opt['linewidth'],
+                'linewidth' : self.opt['line_width'],
                 'linestyle' : 'solid',
             }
             lc = self.get_opt('line_color')
@@ -150,7 +150,7 @@ class FigureLine(BaseFigure):
             self.axes.legend(**legend_opt)
 
     def update_axes(self):
-        if not self.opt['primary']:
+        if self.opt['numplot'] != 0:
             return
 
         if self.get_opt('trange', None) is not None:
@@ -185,7 +185,7 @@ class FigureSpec(BaseFigure):
         self.cbax.yaxis.set_tick_params(**opt)
         for ax in (self.axes, self.cbax):
             for axis in ['top','bottom','left','right']:
-                ax.spines[axis].set_linewidth(self.opt['linewidth'])
+                ax.spines[axis].set_linewidth(self.opt['line_width'])
 
     def buildfigure(self):
         data = self.data
@@ -227,7 +227,7 @@ class FigureSpec(BaseFigure):
 
         # colorbar
         cb = plt.colorbar(im, cax=self.cbax, drawedges=False)
-        cb.outline.set_linewidth(self.opt['linewidth'])
+        cb.outline.set_linewidth(self.opt['line_width'])
         self.cbax.set_ylabel(self.get_opt('zlabel', ''),
                              fontsize=self.opt['fontsize'])
 
@@ -239,7 +239,7 @@ class FigureSpec(BaseFigure):
         axis.set_major_formatter(formatter)
 
     def update_axes(self):
-        if not self.opt['primary']:
+        if self.opt['numplot'] != 0:
             return
 
         if self.get_opt('trange', None) is not None:
