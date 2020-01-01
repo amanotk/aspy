@@ -64,9 +64,6 @@ def generate_stack(var, **options):
         axs.append(plt.axes(rect))
     axs[0].get_shared_x_axes().join(*tuple(axs))
 
-    for j in range(num_plots-1):
-        axs[j].xaxis.set_ticklabels([])
-
     # plot
     for j in range(num_plots):
         if isinstance(var[j], xr.DataArray):
@@ -81,6 +78,10 @@ def generate_stack(var, **options):
                 obj = cls(dat[k], figure, axs[j],
                           numaxes=j, numplot=k, **options)
                 obj.buildfigure()
+
+    # show ticks only for the bottom
+    for j in range(num_plots-1):
+        axs[j].xaxis.set_ticklabels([])
 
     if 'title' in options:
         fontsize = get_point_size(options['fontsize'], options['dpi'])

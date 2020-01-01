@@ -42,6 +42,37 @@ def create_colorbar_axes(axes, size=0.1, sep=0.2):
     return cbax
 
 
+class DateFormatter(mpldates.AutoDateFormatter):
+    def __init__(self, locator):
+        super(DateFormatter, self).__init__(locator)
+
+        # set datetime axis
+        fmt = DateFormatter.formatter
+        self.scaled = {
+            365.0                 : '%Y',
+            30.0                  : '%Y-%m',
+            1.0                   : '%Y-%m-%d',
+            1. / (24)             : fmt('%Y-%m-%d %H:%M', '%m-%d %H:%M'),
+            1. / (24*60)          : fmt('%m-%d %H:%M', '%H:%M'),
+            1. / (24*60*60)       : fmt('%H:%M:%S', '%M:%S'),
+            1. / (24*60*60*1e+3)  : fmt('%H:%M:%S.%f', '%M:%S.%f', True),
+        }
+
+    @staticmethod
+    def formatter(fmt1, fmt2, strip=False):
+        def f(x, pos):
+            x = mpldates.num2date(x)
+            if pos == 0:
+                r = x.strftime(fmt1)
+            else:
+                r = x.strftime(fmt2)
+            if strip:
+                r = r[:-3]
+            return r
+
+        return matplotlib.ticker.FuncFormatter(f)
+
+
 class BaseFigure(object):
     def __init__(self, data, figure, axes, **options):
         self.data   = data
@@ -74,6 +105,24 @@ class BaseFigure(object):
         self.opt['numplot'] = self.opt.get('numplot', 0)
         self.opt['numaxes'] = self.opt.get('numaxes', 0)
 
+    def set_xdate(self):
+        if not self.opt['xtime']:
+            return
+
+        def fmt(x, pos=None):
+            x = mpldates.num2date(x)
+            if pos == 1:
+                fmt = '%H:%M:%S.%f'
+            else:
+                fmt = '%M:%S.%f'
+            return x.strftime(fmt)[:-3]
+
+        # set datetime axis
+        majorloc = mpldates.AutoDateLocator()
+        majorfmt = DateFormatter(majorloc)
+        self.axes.xaxis.set_major_locator(majorloc)
+        self.axes.xaxis.set_major_formatter(majorfmt)
+
     def setup_default_axes(self):
         # tick options
         opt = {
@@ -92,6 +141,7 @@ class BaseFigure(object):
         self.axes.tick_params(axis='y', which='minor', length=0, width=0)
         for axis in ['top','bottom','left','right']:
             self.axes.spines[axis].set_linewidth(self.opt['line_width'])
+        self.set_xdate()
 
     def get_opt(self, key, val=None):
         return get_plot_option(self.data, key, val)
@@ -189,6 +239,7 @@ class FigureSpec(BaseFigure):
         for ax in (self.axes, self.cbax):
             for axis in ['top','bottom','left','right']:
                 ax.spines[axis].set_linewidth(self.opt['line_width'])
+        self.set_xdate()
 
     def buildfigure(self):
         data = self.data
