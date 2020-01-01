@@ -70,6 +70,7 @@ class BaseFigure(object):
             for v in opt_pixel_to_point:
                 if v in self.opt:
                     self.opt[v] = point(self.opt[v])
+        self.opt['xtime']   = self.opt.get('xtime', True)
         self.opt['numplot'] = self.opt.get('numplot', 0)
         self.opt['numaxes'] = self.opt.get('numaxes', 0)
 

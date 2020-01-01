@@ -102,8 +102,9 @@ class BaseFigure(object):
         self.setup_default_axes()
 
     def setup_options(self, options):
-        self.webgl = options.get('use_webgl', False)
         self.opt = options.copy()
+        self.opt['webgl']   = self.opt.get('webgl', False)
+        self.opt['xtime']   = self.opt.get('xtime', True)
         self.opt['numplot'] = self.opt.get('numplot', 0)
         self.opt['numaxes'] = self.opt.get('numaxes', 0)
 
@@ -124,13 +125,30 @@ class BaseFigure(object):
             showline=True,
             showticklabels=True,
         )
+        if self.opt['xtime']:
+            xaxis.update(self.get_date_options())
         self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
         self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
 
     def get_opt(self, key, val=None):
         return get_plot_option(self.data, key, val)
 
-    def set_ylog_options(self, tickvals):
+    def get_date_options(self):
+        opt = {
+            'tickformatstops' : [
+                dict(dtickrange=[None, 1000], value="%M:%S.%L"),
+                dict(dtickrange=[1000, 60000], value="%H:%M:%S"),
+                dict(dtickrange=[60000, 3600000], value="%H:%M"),
+                dict(dtickrange=[3600000, 86400000], value="%Y-%m-%d %H"),
+                dict(dtickrange=[86400000, 604800000], value="%Y-%m-%d"),
+                dict(dtickrange=[604800000, "M1"], value="%Y-%m"),
+                dict(dtickrange=["M1", "M12"], value="%Y"),
+                dict(dtickrange=["M12", None], value="%Y")
+            ]
+        }
+        return opt
+
+    def get_ylog_options(self, tickvals):
         tick1 = np.ceil(np.log10(tickvals))
         tick2 = np.floor(np.log10(tickvals))
         ticks = np.sort(np.unique(np.array(np.concatenate([tick1, tick2]),
@@ -187,7 +205,7 @@ class FigureLine(BaseFigure):
         data = self.data
 
         # use WebGL version or not
-        if self.webgl:
+        if self.opt['webgl']:
             scatter = go.Scattergl
         else:
             scatter = go.Scatter
@@ -341,7 +359,7 @@ class FigureSpec(BaseFigure):
             ylogmax = int(np.floor(yrange[1]))
             ticks   = 10**np.arange(ylogmin, ylogmax+1)
             yaxis['range'] = yrange
-            yaxis.update(self.set_ylog_options(ticks))
+            yaxis.update(self.get_ylog_options(ticks))
         else:
             # linear scale in y
             if self.get_opt('yrange', None) is not None:
