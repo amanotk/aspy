@@ -86,7 +86,6 @@ def generate_stack(var, **options):
             'xanchor'   : 'center',
             'yanchor'   : 'bottom',
         }
-        print(title)
         figure.update_layout(title=title)
     if 'trange' in options:
         figure.update_xaxes(range=pd_to_datetime(options['trange']))
