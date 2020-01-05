@@ -285,12 +285,14 @@ class FigureSpec(BaseFigure):
         self.cbax.set_ylabel(self.get_opt('zlabel', ''),
                              fontsize=self.opt['fontsize'])
 
-    def set_log_ticks(self, axis, dec=1):
-        f  = lambda x, p: r'$\mathregular{10^{%d}}$' % (x)
-        majorloc  = matplotlib.ticker.MultipleLocator(dec)
-        formatter = matplotlib.ticker.FuncFormatter(f)
+    def set_log_ticks(self, axis):
+        def f(x, p):
+            d = int(np.rint(np.log10(x)))
+            return r'$\mathregular{10^{%+d}}$' % (d)
+        majorloc = matplotlib.ticker.LogLocator(numticks=9)
+        majorfmt = matplotlib.ticker.FuncFormatter(f)
         axis.set_major_locator(majorloc)
-        axis.set_major_formatter(formatter)
+        axis.set_major_formatter(majorfmt)
 
     def update_axes(self):
         if self.opt['numplot'] != 0:
@@ -305,6 +307,7 @@ class FigureSpec(BaseFigure):
             self.axes.set_ylim(yrange)
         if self.get_opt('ytype', 'linear') == 'log':
             self.axes.set_yscale('log')
+            self.set_log_ticks(self.axes.yaxis)
 
         self.axes.set_ylabel(self.get_opt('ylabel', ''),
                              fontsize=self.opt['fontsize'])
