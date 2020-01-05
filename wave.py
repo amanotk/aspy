@@ -49,7 +49,7 @@ def _default_attrs_spectrogram():
 
 
 def get_mfa_unit_vector(bx, by, bz):
-    """calculate unit vectors for Magnetic-Field-Aligned coordinate
+    """Calculate unit vectors for Magnetic-Field-Aligned coordinate
 
     e1 : perpendicular to B and lies in the x-z plane
     e2 : e3 x e1
@@ -93,7 +93,7 @@ def get_mfa_unit_vector(bx, by, bz):
 
 
 def transform_vector(vx, vy, vz, e1, e2, e3):
-    """transform vector (vx, vy, vz) to given coordinate system (e1, e2, e3)
+    """Transform vector (vx, vy, vz) to given coordinate system (e1, e2, e3)
 
     Parameters
     ----------
@@ -119,10 +119,10 @@ def transform_vector(vx, vy, vz, e1, e2, e3):
 
 
 def segmentalize(x, nperseg, noverlap):
-    """segmentalize the input array
+    """Segmentalize the input array
 
     This may be useful for custom spectrogram calculation.
-    Reference: scipy.signal.spectral._fft_helper
+    See: scipy.signal.spectral._fft_helper
 
     Parameters
     ----------
@@ -146,7 +146,7 @@ def segmentalize(x, nperseg, noverlap):
 
 
 def spectrogram(x, fs, nperseg, noverlap=None, window=None, detrend=None):
-    """calculate spectrogram
+    """Calculate power spectral density spectrogram
 
     Parameters
     ----------
@@ -230,9 +230,52 @@ def spectrogram(x, fs, nperseg, noverlap=None, window=None, detrend=None):
         return f, t, s
 
 
-class SVD:
-    """ Magnetic Singular Value Decomposition Method
+def msvd(ace, acb, dcb, **kwargs):
+    """Perform wave polarization analysis via magnetic SVD
 
+    This is a convinient wrapper function using MSVD class.
+
+    Parameters
+    ----------
+    ace : DataArray object
+        high-frequency three-component electric field data
+    acb : DataArray object
+        high-frequency three-component magnetic field data
+    acb : DataArray object
+        low-frequency three-component magnetic field data
+    sps_ace : int or float
+        sample per second for ace (8192 by default)
+    sps_acb : int or float
+        sample per second for acb (8192 by default)
+    sps_dcb : int or float
+        sample per second for dcb (128 by default)
+    nperseg : int
+        number of data points for each segment for fft (1024 by default)
+    noverlap : int
+        number of data points for neighboring segment overlap (nperseg/2 by
+        default)
+    window  : str
+        window function ('blackman' by default)
+    wsmooth : str
+        window function for smoothing spectral matrix in time ('blackman' by
+        default)
+    nsmooth : int
+        number of data points for smoothing window (5 by default)
+    detrend : str
+        detrending method for each segment. one of 'constant', 'linear', or
+        False. (False by default)
+
+    Returns
+    -------
+    dictionary of analysis results. each item is a DataArray object which can be
+    displayed as aspectrogram.
+    """
+    svd = MSVD(**kwargs)
+    return svd.analyze(ace, acb, dcb)
+
+
+class MSVD:
+    """ Magnetic Singular Value Decomposition Method
     """
     def __init__(self, **kwargs):
         default_args = {
@@ -251,14 +294,14 @@ class SVD:
 
     def calc_mfa_coord(self, dcb, ti, nperseg, noverlap):
         # magnetic field averaged over given segments
-        bb = dcb.interp(time=ti)
+        bb = dcb.interp(time=ti, method='linear')
         bx = segmentalize(bb.values[:,0], nperseg, noverlap).mean(axis=1)
         by = segmentalize(bb.values[:,1], nperseg, noverlap).mean(axis=1)
         bz = segmentalize(bb.values[:,2], nperseg, noverlap).mean(axis=1)
         bt = np.sqrt(bx**2 + by**2 + bz**2)
         return get_mfa_unit_vector(bx/bt, by/bt, bz/bt)
 
-    def spectral_matrix(self, acb, dcb):
+    def spectral_matrix(self, ace, acb, dcb):
         # calculate spectral matrix
         convolve = ndimage.filters.convolve1d
         sps_acb  = float(self.sps_acb)
@@ -270,28 +313,43 @@ class SVD:
         wsmooth  = self.wsmooth
         nsegment = nperseg - noverlap
         nfreq    = nperseg // 2
+
         # data
         nt = acb.shape[0]
         ti = acb.time.values[:]
         bx = acb.values[:,0]
         by = acb.values[:,1]
         bz = acb.values[:,2]
+        ef = ace.interp(time=ti, method='linear')
+        ex = ef.values[:,0]
+        ey = ef.values[:,1]
+        ez = ef.values[:,2]
         ww = signal.get_window(window, nperseg)
         ww = ww / ww.sum()
         mt = (nt - noverlap)//nsegment
+
         # segmentalize
         Bx = segmentalize(bx, nperseg, noverlap) * ww[None,:]
         By = segmentalize(by, nperseg, noverlap) * ww[None,:]
         Bz = segmentalize(bz, nperseg, noverlap) * ww[None,:]
+        Ex = segmentalize(ex, nperseg, noverlap) * ww[None,:]
+        Ey = segmentalize(ey, nperseg, noverlap) * ww[None,:]
+        Ez = segmentalize(ez, nperseg, noverlap) * ww[None,:]
         # time and frequency coordinate
         tt = segmentalize(ti, nperseg, noverlap).mean(axis=1)
         ff = np.arange(1, nfreq+1)/(nperseg/sps_acb)
+
         # coordinate transformation and FFT (discard zero frequency)
         e1, e2, e3 = self.calc_mfa_coord(dcb, ti, nperseg, noverlap)
         B1, B2, B3 = transform_vector(Bx, By, Bz, e1, e2, e3)
+        E1, E2, E3 = transform_vector(Ex, Ey, Ez, e1, e2, e3)
         B1 = fftpack.fft(B1, axis=-1)[:,1:nfreq+1]
         B2 = fftpack.fft(B2, axis=-1)[:,1:nfreq+1]
         B3 = fftpack.fft(B3, axis=-1)[:,1:nfreq+1]
+        E1 = fftpack.fft(E1, axis=-1)[:,1:nfreq+1]
+        E2 = fftpack.fft(E2, axis=-1)[:,1:nfreq+1]
+        E3 = fftpack.fft(E3, axis=-1)[:,1:nfreq+1]
+
         # calculate 3x3 spectral matrix with smoothing
         ss  = 1/(sps_acb * (ww*ww).sum()) # PSD in units of nT^2/Hz
         ws  = signal.get_window(wsmooth, nsmooth)
@@ -315,6 +373,7 @@ class SVD:
         Q12_im = convolve(Q12.imag, ws, mode='nearest', axis=sma)
         Q22_re = convolve(Q22.real, ws, mode='nearest', axis=sma)
         Q22_im = convolve(Q22.imag, ws, mode='nearest', axis=sma)
+
         # real representation (6x3) for spectral matrix
         N = B1.shape[0]
         M = B1.shape[1]
@@ -337,82 +396,26 @@ class SVD:
         S[:,:,5,0] =-Q02_im
         S[:,:,5,1] =-Q12_im
         S[:,:,5,2] = 0
-        return tt, ff, S
 
-    def poynting(self, ace, acb, dcb):
-        # calculate Poynting vector
-        convolve = ndimage.filters.convolve1d
-        sps_acb  = float(self.sps_acb)
-        sps_dcb  = float(self.sps_dcb)
-        nperseg  = self.nperseg
-        noverlap = self.noverlap
-        window   = self.window
-        nsmooth  = self.nsmooth
-        wsmooth  = self.wsmooth
-        nsegment = nperseg - noverlap
-        nfreq    = nperseg // 2
-        # data size and window
-        nt = acb.shape[0]
-        ti = acb.time.values[:]
-        bx = acb.values[:,0]
-        by = acb.values[:,1]
-        bz = acb.values[:,2]
-        ww = signal.get_window(window, nperseg)
-        ww = ww / ww.sum()
-        mt = (nt - noverlap)//nsegment
-        # interpolate electric field
-        ef = ace.interp(time=acb.time)
-        ex = ef.values[:,0]
-        ey = ef.values[:,1]
-        ez = ef.values[:,2]
-        # segmentalize
-        Ex = segmentalize(ex, nperseg, noverlap) * ww[None,:]
-        Ey = segmentalize(ey, nperseg, noverlap) * ww[None,:]
-        Ez = segmentalize(ez, nperseg, noverlap) * ww[None,:]
-        Bx = segmentalize(bx, nperseg, noverlap) * ww[None,:]
-        By = segmentalize(by, nperseg, noverlap) * ww[None,:]
-        Bz = segmentalize(bz, nperseg, noverlap) * ww[None,:]
-        # time and frequency coordinate
-        tt = segmentalize(ti, nperseg, noverlap).mean(axis=1)
-        ff = np.arange(1, nfreq+1)/(nperseg/sps_acb)
-        # coordinate transformation and FFT
-        e1, e2, e3 = self.calc_mfa_coord(dcb, ti, nperseg, noverlap)
-        E1, E2, E3 = transform_vector(Ex, Ey, Ez, e1, e2, e3)
-        B1, B2, B3 = transform_vector(Bx, By, Bz, e1, e2, e3)
-        # FFT
-        E1 = fftpack.fft(E1, axis=-1)[:,1:nfreq+1] #.T
-        E2 = fftpack.fft(E2, axis=-1)[:,1:nfreq+1] #.T
-        E3 = fftpack.fft(E3, axis=-1)[:,1:nfreq+1] #.T
-        B1 = fftpack.fft(B1, axis=-1)[:,1:nfreq+1] #.T
-        B2 = fftpack.fft(B2, axis=-1)[:,1:nfreq+1] #.T
-        B3 = fftpack.fft(B3, axis=-1)[:,1:nfreq+1] #.T
-        # calculate Poynting flux from cross spectral matrix
-        ws  = signal.get_window(wsmooth, nsmooth)
-        ws  = ws / ws.sum()
-        S1  = (E2 * np.conj(B3) - E3 * np.conj(B2)).real
-        S2  = (E3 * np.conj(B1) - E1 * np.conj(B3)).real
-        S3  = (E1 * np.conj(B2) - E2 * np.conj(B1)).real
-        # E [mV/m] * B [nT] => unit conversion factor = 1.0e-12
-        smaxis = 0
+        # Poynting vector: E [mV/m] * B [nT] => conversion factor = 1e-12
         mu0 = constants.mu_0
-        s1  = convolve(S1, ws, mode='nearest', axis=smaxis) / mu0 * 1.0e-12
-        s2  = convolve(S2, ws, mode='nearest', axis=smaxis) / mu0 * 1.0e-12
-        s3  = convolve(S3, ws, mode='nearest', axis=smaxis) / mu0 * 1.0e-12
-        ss  = np.sqrt(S1**2 + S2**2 + S3**2)
-        tsb = np.rad2deg(np.abs(np.arctan2(np.sqrt(s1**2 + s2**2), s3)))
-        psb = np.rad2deg(np.arctan2(s2, s1))
-        # store result
-        r  = dict()
-        r['s1']       = s1 / ss
-        r['s2']       = s2 / ss
-        r['s3']       = s3 / ss
-        r['theta_sb'] = tsb
-        r['phi_sb']   = psb
-        return r
+        P1 = (E2 * np.conj(B3) - E3 * np.conj(B2)).real / mu0 * 1e-12
+        P2 = (E3 * np.conj(B1) - E1 * np.conj(B3)).real / mu0 * 1e-12
+        P3 = (E1 * np.conj(B2) - E2 * np.conj(B1)).real / mu0 * 1e-12
+        p1 = convolve(P1, ws, mode='nearest', axis=sma)
+        p2 = convolve(P2, ws, mode='nearest', axis=sma)
+        p3 = convolve(P3, ws, mode='nearest', axis=sma)
+        P  = np.zeros((N, M, 3), np.float64)
+        P[:,:,0] = p1
+        P[:,:,1] = p2
+        P[:,:,2] = p3
 
-    def svd(self, acb, dcb):
-        # calculate spectral matrix
-        t, f, S = self.spectral_matrix(acb, dcb)
+        return tt, ff, S, P
+
+    def svd(self, ace, acb, dcb):
+        # calculate spectral matrix and Poyinting vector
+        t, f, S, P = self.spectral_matrix(ace, acb, dcb)
+
         # perform SVD only for valid data
         N, M, _, _ = S.shape
         T = S.reshape(N*M, 6, 3)
@@ -424,10 +427,11 @@ class SVD:
         U = UU.reshape(N, M, 6, 6)
         W = WW.reshape(N, M, 3)
         V = VV.reshape(N, M, 3, 3)
-        self.svd_result = dict(t=t, f=f, S=S, U=U, W=W, V=V)
-        return t, f, self._process_svd_result(S, U, W, V)
+        self.svd_result = dict(t=t, f=f, S=S, U=U, W=W, V=V, P=P)
 
-    def _process_svd_result(self, S, U, W, V):
+        return t, f, self._process_svd_result(S, U, W, V, P)
+
+    def _process_svd_result(self, S, U, W, V, P):
         eps = 1.0e-34
         Tr  = lambda x: np.trace(x, axis1=2, axis2=3)
         SS  = S[...,0:3,0:3] + S[...,3:6,0:3]*1j
@@ -462,6 +466,19 @@ class SVD:
         r['theta_kb'] = tkb
         r['phi_kb']   = pkb
 
+        # Poynting vector
+        p1  = P[...,0]
+        p2  = P[...,1]
+        p3  = P[...,2]
+        pp  = np.sqrt(p1**2 + p2**2 + p3**2)
+        tsb = np.rad2deg(np.abs(np.arctan2(np.sqrt(p1**2 + p2**2), p3)))
+        psb = np.rad2deg(np.arctan2(p2, p1))
+        r['s1']       = p1 / pp
+        r['s2']       = p2 / pp
+        r['s3']       = p3 / pp
+        r['theta_sb'] = tsb
+        r['phi_sb']   = psb
+
         return r
 
     def _setup_arrays(self, t, f, result):
@@ -490,11 +507,8 @@ class SVD:
 
         # power spectral density
         if 'psd' in dadict:
-            zmax = np.ceil(np.log10(np.max(dadict['psd'])))
-            zmin = zmax - 7
             set_plot_option(dadict['psd'],
                             zlabel='log10(PSD [nT^2/Hz])',
-                            #zrange=[zmin, zmax],
                             colormap='viridis',
                             ztype='log')
 
@@ -539,7 +553,7 @@ class SVD:
                             zrange=[0.0, 180.0],
                             colormap='bwr')
 
-        # poynting flux
+        # Poynting vector
         for ss in ('s1', 's2', 's3'):
             if ss in dadict:
                 set_plot_option(dadict[ss],
@@ -563,18 +577,6 @@ class SVD:
         return dadict
 
     def analyze(self, ace, acb, dcb):
-        t, f, result1 = self.svd(acb, dcb)
-        result2 = self.poynting(ace, acb, dcb)
-
-        result = dict()
-        result.update(result1)
-        result.update(result2)
-        dadict = self._setup_arrays(t, f, result)
-
-        return dadict
-
-    def smooth_result(self, xx):
-        convolve = ndimage.filters.convolve1d
-        ws  = self.wsmooth / self.wsmooth.sum()
-        return tuple([convolve(x, ws, mode='nearest') for x in xx])
+        t, f, result = self.svd(ace, acb, dcb)
+        return self._setup_arrays(t, f, result)
 
