@@ -320,6 +320,9 @@ class FigureSpec(BaseFigure):
         xx = pd_to_datetime(tt)
         yy = opt['bine']
 
+        if isinstance(zz, ma.MaskedArray):
+            zz = zz.filled(-np.inf)
+
         opt = dict(name='',
                    xaxis=self.axes['x'],
                    yaxis=self.axes['y'],
@@ -327,7 +330,7 @@ class FigureSpec(BaseFigure):
                    colorbar=cb,
                    zmin=zmin,
                    zmax=zmax)
-        hm = go.Heatmap(z=zz.T.filled(-np.inf), x=xx, y=yy, **opt)
+        hm = go.Heatmap(z=zz.T, x=xx, y=yy, **opt)
         self.figure.add_trace(hm)
         self.plotdata = dict(x=xx, y=yy, z=zz)
 
