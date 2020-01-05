@@ -145,7 +145,7 @@ def segmentalize(x, nperseg, noverlap):
     return result
 
 
-def spectrogram(x, fs, nperseg, noverlap=None, window='blackman'):
+def spectrogram(x, fs, nperseg, noverlap=None, window=None, detrend=None):
     """calculate spectrogram
 
     Parameters
@@ -157,22 +157,31 @@ def spectrogram(x, fs, nperseg, noverlap=None, window='blackman'):
     nperseg : int
         number of data points for each segment
     noverlap : int
-        number of overlapped data points
+        number of overlapped data points (nperseg/2 by default)
     window : str
-        window applied for each segment
+        window applied for each segment ('blackman' is used by default)
+    detrend : str
+        detrend method (either 'constant' or 'linear')
 
     Returns
     -------
+    If x is xarray's DataArray object, result will also be returned as a
+    DataArray object. Otherwise, frequecy, time, power spectral density will be
+    returned as a tuple.
     """
     if noverlap is None:
         noverlap = nperseg // 2
+    if window is None:
+        window = 'blackman'
+    if detrend is None:
+        detrend = False
 
     args = {
+        'fs'       : fs,
         'nperseg'  : nperseg,
         'noverlap' : noverlap,
-        'fs'       : fs,
         'window'   : window,
-        'detrend'  : False,
+        'detrend'  : detrend,
     }
 
     # calculate sum of all input
@@ -226,47 +235,41 @@ class SVD:
 
     """
     def __init__(self, **kwargs):
-        self.sps_ace  = 8192
-        self.sps_acb  = 8192
-        self.sps_dcb  = 128
-        self.nperseg  = self.sps_acb // 8
-        self.noverlap = self.nperseg // 2
-        self.window   = 'blackman'
-        # update attribute given by keyword arguments
-        for key, item in kwargs.items():
-            setattr(self, key, item)
-        self.wsmooth  = signal.get_window(self.window, 1)
+        default_args = {
+            'sps_acb'  : 8192.0,
+            'sps_ace'  : 8192.0,
+            'sps_dcb'  : 128.0,
+            'nperseg'  : 1024,
+            'noverlap' :  512,
+            'window'   : 'blackman',
+            'wsmooth'  : 'blackman',
+            'nsmooth'  : 5,
+            'detrend'  : False,
+        }
+        for key in default_args.keys():
+            setattr(self, key, kwargs.get(key, default_args[key]))
 
     def calc_mfa_coord(self, dcb, ti, nperseg, noverlap):
         # magnetic field averaged over given segments
-        if 1:
-            dt = ti[1] - ti[0]
-            tb = np.concatenate([[ti[0]-dt/2], ti+dt/2])
-            bb = dcb.groupby_bins(dcb.coords['time'], tb).mean().values
-            bt = np.sqrt(np.sum(bb[:,0:3]**2, axis=1))
-            bx = np.array(bb[:,0] / bt)
-            by = np.array(bb[:,1] / bt)
-            bz = np.array(bb[:,2] / bt)
-            return get_mfa_unit_vector(bx, by, bz)
-        else:
-            bb = dcb.interp(time=ti)
-            bx = segmentalize(bb.values[:,0], nperseg, noverlap).mean(axis=1)
-            by = segmentalize(bb.values[:,1], nperseg, noverlap).mean(axis=1)
-            bz = segmentalize(bb.values[:,2], nperseg, noverlap).mean(axis=1)
-            bt = np.sqrt(bx**2 + by**2 + bz**2)
-            return get_mfa_unit_vector(bx/bt, by/bt, bz/bt)
+        bb = dcb.interp(time=ti)
+        bx = segmentalize(bb.values[:,0], nperseg, noverlap).mean(axis=1)
+        by = segmentalize(bb.values[:,1], nperseg, noverlap).mean(axis=1)
+        bz = segmentalize(bb.values[:,2], nperseg, noverlap).mean(axis=1)
+        bt = np.sqrt(bx**2 + by**2 + bz**2)
+        return get_mfa_unit_vector(bx/bt, by/bt, bz/bt)
 
     def spectral_matrix(self, acb, dcb):
-        # spectral matrix
+        # calculate spectral matrix
         convolve = ndimage.filters.convolve1d
         sps_acb  = float(self.sps_acb)
         sps_dcb  = float(self.sps_dcb)
         nperseg  = self.nperseg
         noverlap = self.noverlap
+        window   = self.window
+        nsmooth  = self.nsmooth
+        wsmooth  = self.wsmooth
         nsegment = nperseg - noverlap
         nfreq    = nperseg // 2
-        window   = self.window
-        wsmooth  = self.wsmooth
         # data
         nt = acb.shape[0]
         ti = acb.time.values[:]
@@ -286,31 +289,32 @@ class SVD:
         # coordinate transformation and FFT (discard zero frequency)
         e1, e2, e3 = self.calc_mfa_coord(dcb, ti, nperseg, noverlap)
         B1, B2, B3 = transform_vector(Bx, By, Bz, e1, e2, e3)
-        B1 = fftpack.fft(B1, axis=-1)[:,1:nfreq+1].T
-        B2 = fftpack.fft(B2, axis=-1)[:,1:nfreq+1].T
-        B3 = fftpack.fft(B3, axis=-1)[:,1:nfreq+1].T
+        B1 = fftpack.fft(B1, axis=-1)[:,1:nfreq+1]
+        B2 = fftpack.fft(B2, axis=-1)[:,1:nfreq+1]
+        B3 = fftpack.fft(B3, axis=-1)[:,1:nfreq+1]
         # calculate 3x3 spectral matrix with smoothing
         ss  = 1/(sps_acb * (ww*ww).sum()) # PSD in units of nT^2/Hz
-        ws  = wsmooth / wsmooth.sum()
+        ws  = signal.get_window(wsmooth, nsmooth)
+        ws  = ws / ws.sum()
+        sma = 0 # smoothing along time
         Q00 = B1 * np.conj(B1) * ss
         Q01 = B1 * np.conj(B2) * ss
         Q02 = B1 * np.conj(B3) * ss
         Q11 = B2 * np.conj(B2) * ss
         Q12 = B2 * np.conj(B3) * ss
         Q22 = B3 * np.conj(B3) * ss
-        axis = 1
-        Q00_re = convolve(Q00.real, ws, mode='nearest', axis=axis)
-        Q00_im = convolve(Q00.imag, ws, mode='nearest', axis=axis)
-        Q01_re = convolve(Q01.real, ws, mode='nearest', axis=axis)
-        Q01_im = convolve(Q01.imag, ws, mode='nearest', axis=axis)
-        Q02_re = convolve(Q02.real, ws, mode='nearest', axis=axis)
-        Q02_im = convolve(Q02.imag, ws, mode='nearest', axis=axis)
-        Q11_re = convolve(Q11.real, ws, mode='nearest', axis=axis)
-        Q11_im = convolve(Q11.imag, ws, mode='nearest', axis=axis)
-        Q12_re = convolve(Q12.real, ws, mode='nearest', axis=axis)
-        Q12_im = convolve(Q12.imag, ws, mode='nearest', axis=axis)
-        Q22_re = convolve(Q22.real, ws, mode='nearest', axis=axis)
-        Q22_im = convolve(Q22.imag, ws, mode='nearest', axis=axis)
+        Q00_re = convolve(Q00.real, ws, mode='nearest', axis=sma)
+        Q00_im = convolve(Q00.imag, ws, mode='nearest', axis=sma)
+        Q01_re = convolve(Q01.real, ws, mode='nearest', axis=sma)
+        Q01_im = convolve(Q01.imag, ws, mode='nearest', axis=sma)
+        Q02_re = convolve(Q02.real, ws, mode='nearest', axis=sma)
+        Q02_im = convolve(Q02.imag, ws, mode='nearest', axis=sma)
+        Q11_re = convolve(Q11.real, ws, mode='nearest', axis=sma)
+        Q11_im = convolve(Q11.imag, ws, mode='nearest', axis=sma)
+        Q12_re = convolve(Q12.real, ws, mode='nearest', axis=sma)
+        Q12_im = convolve(Q12.imag, ws, mode='nearest', axis=sma)
+        Q22_re = convolve(Q22.real, ws, mode='nearest', axis=sma)
+        Q22_im = convolve(Q22.imag, ws, mode='nearest', axis=sma)
         # real representation (6x3) for spectral matrix
         N = B1.shape[0]
         M = B1.shape[1]
@@ -338,15 +342,15 @@ class SVD:
     def poynting(self, ace, acb, dcb):
         # calculate Poynting vector
         convolve = ndimage.filters.convolve1d
-        sps_ace  = float(self.sps_ace)
         sps_acb  = float(self.sps_acb)
         sps_dcb  = float(self.sps_dcb)
         nperseg  = self.nperseg
         noverlap = self.noverlap
+        window   = self.window
+        nsmooth  = self.nsmooth
+        wsmooth  = self.wsmooth
         nsegment = nperseg - noverlap
         nfreq    = nperseg // 2
-        window   = self.window
-        wsmooth  = self.wsmooth
         # data size and window
         nt = acb.shape[0]
         ti = acb.time.values[:]
@@ -376,22 +380,24 @@ class SVD:
         E1, E2, E3 = transform_vector(Ex, Ey, Ez, e1, e2, e3)
         B1, B2, B3 = transform_vector(Bx, By, Bz, e1, e2, e3)
         # FFT
-        E1 = fftpack.fft(E1, axis=-1)[:,1:nfreq+1].T
-        E2 = fftpack.fft(E2, axis=-1)[:,1:nfreq+1].T
-        E3 = fftpack.fft(E3, axis=-1)[:,1:nfreq+1].T
-        B1 = fftpack.fft(B1, axis=-1)[:,1:nfreq+1].T
-        B2 = fftpack.fft(B2, axis=-1)[:,1:nfreq+1].T
-        B3 = fftpack.fft(B3, axis=-1)[:,1:nfreq+1].T
+        E1 = fftpack.fft(E1, axis=-1)[:,1:nfreq+1] #.T
+        E2 = fftpack.fft(E2, axis=-1)[:,1:nfreq+1] #.T
+        E3 = fftpack.fft(E3, axis=-1)[:,1:nfreq+1] #.T
+        B1 = fftpack.fft(B1, axis=-1)[:,1:nfreq+1] #.T
+        B2 = fftpack.fft(B2, axis=-1)[:,1:nfreq+1] #.T
+        B3 = fftpack.fft(B3, axis=-1)[:,1:nfreq+1] #.T
         # calculate Poynting flux from cross spectral matrix
-        ws  = wsmooth / wsmooth.sum()
+        ws  = signal.get_window(wsmooth, nsmooth)
+        ws  = ws / ws.sum()
         S1  = (E2 * np.conj(B3) - E3 * np.conj(B2)).real
         S2  = (E3 * np.conj(B1) - E1 * np.conj(B3)).real
         S3  = (E1 * np.conj(B2) - E2 * np.conj(B1)).real
         # E [mV/m] * B [nT] => unit conversion factor = 1.0e-12
+        smaxis = 0
         mu0 = constants.mu_0
-        s1  = convolve(S1, ws, mode='nearest') / mu0 * 1.0e-12
-        s2  = convolve(S2, ws, mode='nearest') / mu0 * 1.0e-12
-        s3  = convolve(S3, ws, mode='nearest') / mu0 * 1.0e-12
+        s1  = convolve(S1, ws, mode='nearest', axis=smaxis) / mu0 * 1.0e-12
+        s2  = convolve(S2, ws, mode='nearest', axis=smaxis) / mu0 * 1.0e-12
+        s3  = convolve(S3, ws, mode='nearest', axis=smaxis) / mu0 * 1.0e-12
         ss  = np.sqrt(S1**2 + S2**2 + S3**2)
         tsb = np.rad2deg(np.abs(np.arctan2(np.sqrt(s1**2 + s2**2), s3)))
         psb = np.rad2deg(np.arctan2(s2, s1))
@@ -471,7 +477,7 @@ class SVD:
         dadict = dict()
         for key in result.keys():
             try:
-                data = xr.DataArray(result[key].transpose(), **default_args)
+                data = xr.DataArray(result[key], **default_args)
                 data.name = key
                 data.attrs = _default_attrs_spectrogram()
                 set_plot_option(data,
