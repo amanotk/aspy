@@ -255,7 +255,7 @@ def interpolate_spectrogram(ybin, data, **kwargs):
                                  bounds_error=False, fill_value=None)
         return f(newx)
 
-    nx = ybin.shape[0]
+    nx = data.shape[0]
 
     # check ybin
     if ybin.ndim == 1:

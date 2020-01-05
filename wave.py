@@ -122,6 +122,7 @@ def segmentalize(x, nperseg, noverlap):
     """segmentalize the input array
 
     This may be useful for custom spectrogram calculation.
+    Reference: scipy.signal.spectral._fft_helper
 
     Parameters
     ----------
@@ -165,12 +166,14 @@ def spectrogram(x, fs, nperseg, noverlap=None, window='blackman'):
     """
     if noverlap is None:
         noverlap = nperseg // 2
-        args = {
-            'nperseg'  : nperseg,
-            'noverlap' : noverlap,
-            'fs'       : fs,
-            'window'   : window,
-        }
+
+    args = {
+        'nperseg'  : nperseg,
+        'noverlap' : noverlap,
+        'fs'       : fs,
+        'window'   : window,
+        'detrend'  : False,
+    }
 
     # calculate sum of all input
     x = cast_list(x)
@@ -227,22 +230,31 @@ class SVD:
         self.sps_acb  = 8192
         self.sps_dcb  = 128
         self.nperseg  = self.sps_acb // 8
-        self.noverlap = self.nperseg // 8
-        self.window   = np.blackman
-        self.wsmooth  = np.blackman(7)
+        self.noverlap = self.nperseg // 2
+        self.window   = 'blackman'
         # update attribute given by keyword arguments
         for key, item in kwargs.items():
             setattr(self, key, item)
+        self.wsmooth  = signal.get_window(self.window, 1)
 
-    def calc_mfa_coord(self, dcb, tb):
-        # magnetic field averaged over bins
-        time = dcb.coords['time']
-        bb = dcb.groupby_bins(time, tb).mean().values
-        bt = np.sqrt(np.sum(bb[:,0:3]**2, axis=1))
-        bx = np.array(bb[:,0] / bt)
-        by = np.array(bb[:,1] / bt)
-        bz = np.array(bb[:,2] / bt)
-        return get_mfa_unit_vector(bx, by, bz)
+    def calc_mfa_coord(self, dcb, ti, nperseg, noverlap):
+        # magnetic field averaged over given segments
+        if 1:
+            dt = ti[1] - ti[0]
+            tb = np.concatenate([[ti[0]-dt/2], ti+dt/2])
+            bb = dcb.groupby_bins(dcb.coords['time'], tb).mean().values
+            bt = np.sqrt(np.sum(bb[:,0:3]**2, axis=1))
+            bx = np.array(bb[:,0] / bt)
+            by = np.array(bb[:,1] / bt)
+            bz = np.array(bb[:,2] / bt)
+            return get_mfa_unit_vector(bx, by, bz)
+        else:
+            bb = dcb.interp(time=ti)
+            bx = segmentalize(bb.values[:,0], nperseg, noverlap).mean(axis=1)
+            by = segmentalize(bb.values[:,1], nperseg, noverlap).mean(axis=1)
+            bz = segmentalize(bb.values[:,2], nperseg, noverlap).mean(axis=1)
+            bt = np.sqrt(bx**2 + by**2 + bz**2)
+            return get_mfa_unit_vector(bx/bt, by/bt, bz/bt)
 
     def spectral_matrix(self, acb, dcb):
         # spectral matrix
@@ -257,10 +269,11 @@ class SVD:
         wsmooth  = self.wsmooth
         # data
         nt = acb.shape[0]
+        ti = acb.time.values[:]
         bx = acb.values[:,0]
         by = acb.values[:,1]
         bz = acb.values[:,2]
-        ww = window(nperseg)
+        ww = signal.get_window(window, nperseg)
         ww = ww / ww.sum()
         mt = (nt - noverlap)//nsegment
         # segmentalize
@@ -268,36 +281,36 @@ class SVD:
         By = segmentalize(by, nperseg, noverlap) * ww[None,:]
         Bz = segmentalize(bz, nperseg, noverlap) * ww[None,:]
         # time and frequency coordinate
-        dt = nsegment / sps_acb
-        tb = acb.time[::nsegment].values # bin edges
-        tt = 0.5*(tb[+1:] + tb[:-1])     # bin center
+        tt = segmentalize(ti, nperseg, noverlap).mean(axis=1)
         ff = np.arange(1, nfreq+1)/(nperseg/sps_acb)
-        # coordinate transformation and FFT
-        e1, e2, e3 = self.calc_mfa_coord(dcb, tb)
+        # coordinate transformation and FFT (discard zero frequency)
+        e1, e2, e3 = self.calc_mfa_coord(dcb, ti, nperseg, noverlap)
         B1, B2, B3 = transform_vector(Bx, By, Bz, e1, e2, e3)
         B1 = fftpack.fft(B1, axis=-1)[:,1:nfreq+1].T
         B2 = fftpack.fft(B2, axis=-1)[:,1:nfreq+1].T
         B3 = fftpack.fft(B3, axis=-1)[:,1:nfreq+1].T
         # calculate 3x3 spectral matrix with smoothing
+        ss  = 1/(sps_acb * (ww*ww).sum()) # PSD in units of nT^2/Hz
         ws  = wsmooth / wsmooth.sum()
-        Q00 = B1 * np.conj(B1)
-        Q01 = B1 * np.conj(B2)
-        Q02 = B1 * np.conj(B3)
-        Q11 = B2 * np.conj(B2)
-        Q12 = B2 * np.conj(B3)
-        Q22 = B3 * np.conj(B3)
-        Q00_re = convolve(Q00.real, ws, mode='nearest')
-        Q00_im = convolve(Q00.imag, ws, mode='nearest')
-        Q01_re = convolve(Q01.real, ws, mode='nearest')
-        Q01_im = convolve(Q01.imag, ws, mode='nearest')
-        Q02_re = convolve(Q02.real, ws, mode='nearest')
-        Q02_im = convolve(Q02.imag, ws, mode='nearest')
-        Q11_re = convolve(Q11.real, ws, mode='nearest')
-        Q11_im = convolve(Q11.imag, ws, mode='nearest')
-        Q12_re = convolve(Q12.real, ws, mode='nearest')
-        Q12_im = convolve(Q12.imag, ws, mode='nearest')
-        Q22_re = convolve(Q22.real, ws, mode='nearest')
-        Q22_im = convolve(Q22.imag, ws, mode='nearest')
+        Q00 = B1 * np.conj(B1) * ss
+        Q01 = B1 * np.conj(B2) * ss
+        Q02 = B1 * np.conj(B3) * ss
+        Q11 = B2 * np.conj(B2) * ss
+        Q12 = B2 * np.conj(B3) * ss
+        Q22 = B3 * np.conj(B3) * ss
+        axis = 1
+        Q00_re = convolve(Q00.real, ws, mode='nearest', axis=axis)
+        Q00_im = convolve(Q00.imag, ws, mode='nearest', axis=axis)
+        Q01_re = convolve(Q01.real, ws, mode='nearest', axis=axis)
+        Q01_im = convolve(Q01.imag, ws, mode='nearest', axis=axis)
+        Q02_re = convolve(Q02.real, ws, mode='nearest', axis=axis)
+        Q02_im = convolve(Q02.imag, ws, mode='nearest', axis=axis)
+        Q11_re = convolve(Q11.real, ws, mode='nearest', axis=axis)
+        Q11_im = convolve(Q11.imag, ws, mode='nearest', axis=axis)
+        Q12_re = convolve(Q12.real, ws, mode='nearest', axis=axis)
+        Q12_im = convolve(Q12.imag, ws, mode='nearest', axis=axis)
+        Q22_re = convolve(Q22.real, ws, mode='nearest', axis=axis)
+        Q22_im = convolve(Q22.imag, ws, mode='nearest', axis=axis)
         # real representation (6x3) for spectral matrix
         N = B1.shape[0]
         M = B1.shape[1]
@@ -336,10 +349,11 @@ class SVD:
         wsmooth  = self.wsmooth
         # data size and window
         nt = acb.shape[0]
+        ti = acb.time.values[:]
         bx = acb.values[:,0]
         by = acb.values[:,1]
         bz = acb.values[:,2]
-        ww = window(nperseg)
+        ww = signal.get_window(window, nperseg)
         ww = ww / ww.sum()
         mt = (nt - noverlap)//nsegment
         # interpolate electric field
@@ -355,12 +369,10 @@ class SVD:
         By = segmentalize(by, nperseg, noverlap) * ww[None,:]
         Bz = segmentalize(bz, nperseg, noverlap) * ww[None,:]
         # time and frequency coordinate
-        dt = nsegment / sps_acb
-        tb = acb.time[::nsegment].values # bin edges
-        tt = 0.5*(tb[+1:] + tb[:-1])     # bin center
+        tt = segmentalize(ti, nperseg, noverlap).mean(axis=1)
         ff = np.arange(1, nfreq+1)/(nperseg/sps_acb)
         # coordinate transformation and FFT
-        e1, e2, e3 = self.calc_mfa_coord(dcb, tb)
+        e1, e2, e3 = self.calc_mfa_coord(dcb, ti, nperseg, noverlap)
         E1, E2, E3 = transform_vector(Ex, Ey, Ez, e1, e2, e3)
         B1, B2, B3 = transform_vector(Bx, By, Bz, e1, e2, e3)
         # FFT
@@ -416,8 +428,11 @@ class SVD:
 
         r = dict()
 
-        ### power spectral density
-        r['psd'] = Tr(np.abs(SS))
+        ### power spectral density (need to double except for Nyquist freq.)
+        psd = 2 * Tr(np.abs(SS))
+        if psd.shape[0] % 2 == 0:
+            psd[-1,:] *= 0.5
+        r['psd'] = psd
 
         ### degree of polarization
         r['degpol'] = 1.5*(Tr(np.matmul(SS,SS))/(Tr(SS)**2+eps)).real - 0.5
@@ -473,8 +488,8 @@ class SVD:
             zmin = zmax - 7
             set_plot_option(dadict['psd'],
                             zlabel='log10(PSD [nT^2/Hz])',
-                            zrange=[zmin, zmax],
-                            colormap='jet',
+                            #zrange=[zmin, zmax],
+                            colormap='viridis',
                             ztype='log')
 
         # degree of polarization
@@ -482,14 +497,14 @@ class SVD:
             set_plot_option(dadict['degpol'],
                             zlabel='Deg. Pol',
                             zrange=[0.0, +1.0],
-                            colormap='greens')
+                            colormap='Greens')
 
         # planarity
         if 'planarity' in dadict:
             set_plot_option(dadict['planarity'],
                             zlabel='Planarity',
                             zrange=[0.0, +1.0],
-                            colormap='greens')
+                            colormap='Greens')
 
         # ellipticity
         if 'ellipticity' in dadict:
