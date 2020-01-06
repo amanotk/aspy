@@ -18,34 +18,15 @@ import pandas as pd
 
 from insitu import cast_list
 from insitu import set_plot_option
+from insitu import get_default_tplot_attrs
 
-
-def _default_attrs_spectrogram():
-    default_attrs = {
-        'plot_options' : {
-            'xaxis_opt' : {
-                'axis_label' : 'Time',
-                'x_axis_type' : 'linear',
-            },
-            'yaxis_opt' : {
-                'axis_label' : 'Freq [Hz]',
-                'y_axis_type' : 'log',
-                'y_range' : [0.0, 1.0],
-            },
-            'zaxis_opt' : {
-                'axis_label' : '',
-                'z_axis_type' : 'linear',
-            },
-            'trange' : [0.0, 1.0],
-            'extras' : {
-                'spec' : True,
-                'colormap' : ['viridis'],
-                'panel_size' : 1,
-                'char_size' : 10,
-            },
-        },
-    }
-    return default_attrs
+def get_default_spectrogram_attrs():
+    attrs = get_default_tplot_attrs()
+    attrs['plot_options']['yaxis_opt']['y_axis_type'] = 'log'
+    attrs['plot_options']['yaxis_opt']['axis_label'] = 'Freq [Hz]'
+    attrs['plot_options']['extras']['spec'] = True
+    attrs['plot_options']['spec_bins_ascending'] = True
+    return attrs
 
 
 def get_mfa_unit_vector(bx, by, bz):
@@ -217,12 +198,11 @@ def spectrogram(x, fs, nperseg, noverlap=None, window=None, detrend=None):
         data = xr.DataArray(s, **args)
 
         # set attribute
-        data.attrs = _default_attrs_spectrogram()
+        data.attrs = get_default_spectrogram_attrs()
         set_plot_option(data,
                         yrange=[f[0,0], f[0,-1]],
                         trange=[t[0], t[-1]],
-                        z_type='log',
-                        colormap='viridis')
+                        z_type='log')
 
         return data
     else:
@@ -496,7 +476,7 @@ class MSVD:
             try:
                 data = xr.DataArray(result[key], **default_args)
                 data.name = key
-                data.attrs = _default_attrs_spectrogram()
+                data.attrs = get_default_spectrogram_attrs()
                 set_plot_option(data,
                                 yrange=[f[0], f[-1]],
                                 trange=[t[0], t[-1]])
@@ -508,8 +488,8 @@ class MSVD:
         # power spectral density
         if 'psd' in dadict:
             set_plot_option(dadict['psd'],
-                            zlabel='log10(PSD [nT^2/Hz])',
-                            colormap='viridis',
+                            zlabel='PSD [nT^2/Hz]',
+                            colormap=['viridis'],
                             ztype='log')
 
         # degree of polarization
@@ -517,21 +497,21 @@ class MSVD:
             set_plot_option(dadict['degpol'],
                             zlabel='Deg. Pol',
                             zrange=[0.0, +1.0],
-                            colormap='Greens')
+                            colormap=['Greens'])
 
         # planarity
         if 'planarity' in dadict:
             set_plot_option(dadict['planarity'],
                             zlabel='Planarity',
                             zrange=[0.0, +1.0],
-                            colormap='Greens')
+                            colormap=['Greens'])
 
         # ellipticity
         if 'ellipticity' in dadict:
             set_plot_option(dadict['ellipticity'],
                             zlabel='Ellipticity',
                             zrange=[-1.0, +1.0],
-                            colormap='bwr')
+                            colormap=['bwr'])
 
         # k vector
         for nn in ('n1', 'n2', 'n3'):
@@ -539,19 +519,19 @@ class MSVD:
                 set_plot_option(dadict[nn],
                                 zlabel=nn,
                                 zrange=[-1, +1],
-                                colormap='bwr')
+                                colormap=['bwr'])
 
         if 'theta_kb' in dadict:
             set_plot_option(dadict['theta_kb'],
                             zlabel='theta_kb',
                             zrange=[0.0, 90.0],
-                            colormap='bwr')
+                            colormap=['bwr'])
 
         if 'phi_kb' in dadict:
             set_plot_option(dadict['phi_kb'],
                             zlabel='phi_kb',
                             zrange=[0.0, 180.0],
-                            colormap='bwr')
+                            colormap=['bwr'])
 
         # Poynting vector
         for ss in ('s1', 's2', 's3'):
@@ -559,20 +539,19 @@ class MSVD:
                 set_plot_option(dadict[ss],
                                 zlabel=ss,
                                 zrange=[-1, +1],
-                                colormap='bwr')
+                                colormap=['bwr'])
 
         if 'theta_sb' in dadict:
             set_plot_option(dadict['theta_sb'],
                             zlabel='theta_sb',
                             zrange=[0.0, 180.0],
-                            colormap='bwr')
+                            colormap=['bwr'])
 
         if 'phi_sb' in dadict:
             set_plot_option(dadict['phi_sb'],
                             zlabel='phi_sb',
                             zrange=[0.0, 180.0],
-                            colormap='bwr')
-
+                            colormap=['bwr'])
 
         return dadict
 

@@ -6,6 +6,7 @@
 
 import warnings
 
+import copy
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -16,13 +17,13 @@ except:
     pytplot = None
 
 
-default_layout = {
+_default_layout = {
     'dpi'           : 300,
     'width'         : 800,
     'height'        : 800,
     'vspace'        : 25,
     'margin_top'    : 40,
-    'margin_bottom' : 80,
+    'margin_bottom' : 50,
     'margin_left'   : 100,
     'margin_right'  : 140,
     'line_width'    : 1,
@@ -35,7 +36,42 @@ default_layout = {
     'colorbar_size' : 25,
 }
 
-_option_table = {
+_tplot_default_attrs = {
+    'plot_options' : {
+        'xaxis_opt' : {
+            'axis_label' : 'Time',
+            'crosshair' : 'X',
+            'x_axis_type' : 'linear',
+        },
+        'yaxis_opt' : {
+            'axis_label' : 'Y',
+            'crosshair' : 'Y',
+            'y_axis_type' : 'linear',
+        },
+        'zaxis_opt' : {
+            'axis_label' : 'Z',
+            'crosshair' : 'Z',
+            'z_axis_type' : 'linear',
+        },
+        'extras' : {
+            'spec' : False,
+            'colormap' : ['viridis'],
+            'panel_size' : 1,
+            'char_size' : 10,
+        },
+        'trange' : [0.0, 1.0],
+        'spec_bins_ascending' : None,
+        'line_opt': {},
+        'time_bar': [],
+        'create_time': None,
+        'links': {},
+        'overplots': [],
+        'interactive_xaxis_opt': {},
+        'interactive_yaxis_opt': {},
+    },
+}
+
+_tplot_option_table = {
     # x axis
     'xlabel'        : ('xaxis_opt', 'axis_label', ),
     'x_label'       : ('xaxis_opt', 'axis_label', ),
@@ -68,6 +104,18 @@ _option_table = {
     'colormap'      : ('extras', 'colormap', ),
     'panelsize'     : ('extras', 'panel_size',),
 }
+
+
+def get_default_layout():
+    return copy.deepcopy(_default_layout)
+
+
+def get_default_tplot_attrs():
+    return copy.deepcopy(_tplot_default_attrs)
+
+
+def get_tplot_option_table():
+    return copy.deepcopy(_tplot_option_table)
 
 
 def is_ipython():
@@ -105,7 +153,7 @@ def process_kwargs(opt, kwargs, key, newkey=None):
 
 
 def set_plot_option(data, **kwargs):
-    option_table = _option_table
+    option_table = get_tplot_option_table()
     option_keys = option_table.keys()
 
     # check
@@ -129,7 +177,7 @@ def set_plot_option(data, **kwargs):
 
 
 def get_plot_option(data, key, val=None):
-    option_table = _option_table
+    option_table = get_tplot_option_table()
     option_keys = option_table.keys()
 
     # check
@@ -155,23 +203,24 @@ def get_figure_class(var, classdict):
     opt = var.attrs['plot_options'].get('extras')
 
     if opt.get('plotter', None) is not None:
-        cls = opt.get('plotter')
-    elif opt.get('spec', False):
-        cls = classdict.get('Spec')
-    elif opt.get('alt', False):
-        cls = classdict.get('Alt')
-    elif opt.get('map', False):
-        cls = classdict.get('Map')
-    else:
-        cls = classdict.get('Line')
+        return opt.get('plotter')
 
-    return cls
+    if opt.get('spec', False) and opt.get('spec'):
+        return classdict.get('Spec')
+
+    if opt.get('alt', False) and opt.get('alt'):
+        return classdict.get('Alt')
+
+    if opt.get('map', False) and opt.get('map'):
+        return classdict.get('Map')
+
+    return classdict.get('Line')
 
 
 def get_figure_layout(var, **kwargs):
     var = cast_list(cast_xarray(var))
 
-    layout = default_layout.copy()
+    layout = get_default_layout()
     for key in layout.keys():
         if key in kwargs:
             layout[key] = kwargs[key]
@@ -344,30 +393,6 @@ def to_datestring(t, fmt=None):
 
 
 def create_xarray(**data):
-    # default attribute
-    default_attrs = {
-        'plot_options' : {
-            'xaxis_opt' : {
-                'axis_label' : 'Time',
-                'x_axis_type' : 'linear',
-            },
-            'yaxis_opt' : {
-                'axis_label' : 'Y',
-                'y_axis_type' : 'linear',
-            },
-            'zaxis_opt' : {
-                'axis_label' : 'Z',
-                'z_axis_type' : 'linear',
-            },
-            'extras' : {
-                'spec' : 0,
-                'colormap' : ['viridis'],
-                'panel_size' : 1,
-                'char_size' : 10,
-            },
-        },
-    }
-
     if 'x' in data and 'y' in data:
         x = np.array(data['x'])
         y = np.array(data['y'])
@@ -382,10 +407,16 @@ def create_xarray(**data):
     else:
             raise ValueError('Error: incompatible input')
 
+    if 'name' in data:
+        name = data['name']
+    else:
+        name = None
+
     # create DataArray object
     obj = xr.DataArray(y, dims=dims,
                        coords={'time' : ('time', x), 'v' : ('vdim', v)})
-    obj.attrs = default_attrs.copy()
+    obj.name = name
+    obj.attrs = get_default_tplot_attrs()
 
     return obj
 

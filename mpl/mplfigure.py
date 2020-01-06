@@ -286,10 +286,15 @@ class FigureSpec(BaseFigure):
                              fontsize=self.opt['fontsize'])
 
     def set_log_ticks(self, axis):
+        # put major ticks for each decade
         def f(x, p):
             d = int(np.rint(np.log10(x)))
             return r'$\mathregular{10^{%+d}}$' % (d)
-        majorloc = matplotlib.ticker.LogLocator(numticks=9)
+        ymin = self.data.coords['spec_bins'].values.min()
+        ymax = self.data.coords['spec_bins'].values.max()
+        decs = np.arange(np.ceil(np.log10(ymin)), np.ceil(np.log10(ymax)), 1)
+        ticks = 10.0**decs
+        majorloc = matplotlib.ticker.FixedLocator(ticks)
         majorfmt = matplotlib.ticker.FuncFormatter(f)
         axis.set_major_locator(majorloc)
         axis.set_major_formatter(majorfmt)
