@@ -284,6 +284,7 @@ class FigureSpec(BaseFigure):
         cb.outline.set_linewidth(self.opt['line_width'])
         self.cbax.set_ylabel(self.get_opt('zlabel', ''),
                              fontsize=self.opt['fontsize'])
+        self.set_colorbar_ticks(cb)
 
     def set_log_ticks(self, axis):
         # put major ticks for each decade
@@ -320,6 +321,23 @@ class FigureSpec(BaseFigure):
         # TODO: minor ticks
         self.axes.tick_params(axis='x', which='minor', length=0, width=0)
         self.axes.tick_params(axis='y', which='minor', length=0, width=0)
+
+    def set_colorbar_ticks(self, cb):
+        if self.get_opt('colorbar_ticks', None) is None:
+            return
+
+        opt = self.get_opt('colorbar_ticks')
+        if 'tickvals' in opt and 'ticktext' in opt:
+            tickvals = opt['tickvals']
+            ticktext = opt['ticktext']
+            # check
+            if tickvals.shape == ticktext.shape and tickvals.ndim == 1:
+                cb.set_ticks(tickvals)
+                cb.set_ticklabels(ticktext)
+            else:
+                print('Error: tickvals and ticktext are not consistent')
+        else:
+            print('Error: tickvals or ticktext are not given')
 
 
 class FigureAlt(BaseFigure):

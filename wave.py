@@ -10,6 +10,7 @@ References
 """
 
 import numpy as np
+from numpy import ma
 import scipy as sp
 from scipy import fftpack, signal, ndimage, constants
 
@@ -437,7 +438,7 @@ class MSVD:
         k1  = np.sign(V[...,2,2])*V[...,2,0]
         k2  = np.sign(V[...,2,2])*V[...,2,1]
         k3  = np.sign(V[...,2,2])*V[...,2,2]
-        kk  = np.sqrt(k1**2 + k2**2 + k3**2)
+        kk  = np.sqrt(k1**2 + k2**2 + k3**2) + eps
         tkb = np.rad2deg(np.abs(np.arctan2(np.sqrt(k1**2 + k2**2), k3)))
         pkb = np.rad2deg(np.arctan2(k2, k1))
         r['n1']       = k1 / kk
@@ -450,7 +451,7 @@ class MSVD:
         p1  = P[...,0]
         p2  = P[...,1]
         p3  = P[...,2]
-        pp  = np.sqrt(p1**2 + p2**2 + p3**2)
+        pp  = np.sqrt(p1**2 + p2**2 + p3**2) + eps
         tsb = np.rad2deg(np.abs(np.arctan2(np.sqrt(p1**2 + p2**2), p3)))
         psb = np.rad2deg(np.arctan2(p2, p1))
         r['s1']       = p1 / pp
@@ -487,20 +488,41 @@ class MSVD:
 
         # power spectral density
         if 'psd' in dadict:
+            psd  = dadict['psd'].values
+            psd  = ma.masked_where(np.isnan(psd), psd)
+            ndec = 7
+            zmax = np.ceil(np.log10(psd.max()))
+            zmin = zmax - ndec
+            print('psd => [min, max] = [%6.2f, %6.2f]' % (zmin, zmax))
+            colorbar_ticks = {
+                'tickvals' : np.linspace(zmin, zmax, ndec+1),
+                'ticktext' : np.linspace(zmin, zmax, ndec+1, dtype=np.int32),
+            }
             set_plot_option(dadict['psd'],
                             zlabel='PSD [nT^2/Hz]',
+                            ztype='log',
+                            zrange=[zmin, zmax],
                             colormap=['viridis'],
-                            ztype='log')
+                            colorbar_ticks=colorbar_ticks)
 
         # degree of polarization
         if 'degpol' in dadict:
+            colorbar_ticks = {
+                'tickvals' : np.linspace(0, +1, 5),
+                'ticktext' : np.linspace(0, +1, 5),
+            }
             set_plot_option(dadict['degpol'],
                             zlabel='Deg. Pol',
                             zrange=[0.0, +1.0],
-                            colormap=['Greens'])
+                            colormap=['Greens'],
+                            colorbar_ticks=colorbar_ticks)
 
         # planarity
         if 'planarity' in dadict:
+            colorbar_ticks = {
+                'tickvals' : np.linspace(0, +1, 5),
+                'ticktext' : np.linspace(0, +1, 5),
+            }
             set_plot_option(dadict['planarity'],
                             zlabel='Planarity',
                             zrange=[0.0, +1.0],
@@ -508,50 +530,85 @@ class MSVD:
 
         # ellipticity
         if 'ellipticity' in dadict:
+            colorbar_ticks = {
+                'tickvals' : np.linspace(-1, +1, 5),
+                'ticktext' : np.linspace(-1, +1, 5),
+            }
             set_plot_option(dadict['ellipticity'],
                             zlabel='Ellipticity',
                             zrange=[-1.0, +1.0],
-                            colormap=['bwr'])
+                            colormap=['bwr'],
+                            colorbar_ticks=colorbar_ticks)
 
         # k vector
         for nn in ('n1', 'n2', 'n3'):
+            colorbar_ticks = {
+                'tickvals' : np.linspace(-1, +1, 5),
+                'ticktext' : np.linspace(-1, +1, 5),
+            }
             if nn in dadict:
                 set_plot_option(dadict[nn],
                                 zlabel=nn,
                                 zrange=[-1, +1],
-                                colormap=['bwr'])
+                                colormap=['bwr'],
+                                colorbar_ticks=colorbar_ticks)
 
         if 'theta_kb' in dadict:
+            colorbar_ticks = {
+                'tickvals' : np.linspace(0, 90, 4),
+                'ticktext' : np.linspace(0, 90, 4),
+            }
             set_plot_option(dadict['theta_kb'],
                             zlabel='theta_kb',
                             zrange=[0.0, 90.0],
-                            colormap=['bwr'])
+                            colormap=['bwr'],
+                            colorbar_ticks=colorbar_ticks)
 
         if 'phi_kb' in dadict:
+            colorbar_ticks = {
+                'tickvals' : np.linspace(0, 360, 5),
+                'ticktext' : np.linspace(0, 360, 5),
+            }
             set_plot_option(dadict['phi_kb'],
                             zlabel='phi_kb',
-                            zrange=[0.0, 180.0],
-                            colormap=['bwr'])
+                            zrange=[0.0, 360.0],
+                            colormap=['bwr'],
+                            colorbar_ticks=colorbar_ticks)
 
         # Poynting vector
         for ss in ('s1', 's2', 's3'):
+            colorbar_ticks = {
+                'tickvals' : np.linspace(-1, +1, 5),
+                'ticktext' : np.linspace(-1, +1, 5),
+            }
             if ss in dadict:
                 set_plot_option(dadict[ss],
                                 zlabel=ss,
                                 zrange=[-1, +1],
-                                colormap=['bwr'])
+                                colormap=['bwr'],
+                                colorbar_ticks=colorbar_ticks)
 
         if 'theta_sb' in dadict:
+            colorbar_ticks = {
+                'tickvals' : np.linspace(0, 180, 5),
+                'ticktext' : np.linspace(0, 180, 5),
+            }
             set_plot_option(dadict['theta_sb'],
                             zlabel='theta_sb',
                             zrange=[0.0, 180.0],
-                            colormap=['bwr'])
+                            colormap=['bwr'],
+                            colorbar_ticks=colorbar_ticks)
 
         if 'phi_sb' in dadict:
+            colorbar_ticks = {
+                'tickvals' : np.linspace(0, 360, 5),
+                'ticktext' : np.linspace(0, 360, 5),
+            }
             set_plot_option(dadict['phi_sb'],
                             zlabel='phi_sb',
-                            zrange=[0.0, 180.0],
-                            colormap=['bwr'])
+                            zrange=[0.0, 360.0],
+                            colormap=['bwr'],
+                            colorbar_ticks=colorbar_ticks)
 
         return dadict
 

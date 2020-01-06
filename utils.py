@@ -68,6 +68,7 @@ _tplot_default_attrs = {
         'overplots': [],
         'interactive_xaxis_opt': {},
         'interactive_yaxis_opt': {},
+        'colorbar_ticks' : None,
     },
 }
 
@@ -103,6 +104,8 @@ _tplot_option_table = {
     'line_color'    : ('extras', 'line_color', ),
     'colormap'      : ('extras', 'colormap', ),
     'panelsize'     : ('extras', 'panel_size',),
+    'cb_ticks'      : ('colorbar_ticks',),
+    'colorbar_ticks': ('colorbar_ticks',)
 }
 
 
