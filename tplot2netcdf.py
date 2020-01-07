@@ -47,18 +47,22 @@ def save(tplotvars, filename, replace=False, verbose=True):
 
     # save for each variables
     for var in tplotvars:
+        temp = None
         if isinstance(var, str) and pytplot is not None:
             temp = _get_encoded_xarray(pytplot.get_data(var, xarray=True))
         elif isinstance(var, xr.DataArray):
             temp = _get_encoded_xarray(var)
         else:
-            raise ValueError('Unknown input variables : ', var)
-        # write to disk
-        temp.to_netcdf(filename, group=temp.name, mode=mode)
-        mode = 'a'
+            print('Error: ignoring unknown input variables : ', var)
+            continue
 
-        if verbose:
-            print('DataArray %s was saved to %s ...' % (temp.name, filename))
+        # write to disk
+        if isinstance(temp, xr.DataArray) and hasattr(temp, 'name'):
+            temp.to_netcdf(filename, group=temp.name, mode=mode)
+            mode = 'a'
+
+            if verbose:
+                print('DataArray %s was saved to %s ...' % (temp.name, filename))
 
 
 def load(filename, tplot=True, verbose=True):

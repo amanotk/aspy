@@ -493,7 +493,6 @@ class MSVD:
             ndec = 7
             zmax = np.ceil(np.log10(psd.max()))
             zmin = zmax - ndec
-            print('psd => [min, max] = [%6.2f, %6.2f]' % (zmin, zmax))
             colorbar_ticks = {
                 'tickvals' : np.linspace(zmin, zmax, ndec+1),
                 'ticktext' : np.linspace(zmin, zmax, ndec+1, dtype=np.int32),
