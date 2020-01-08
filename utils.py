@@ -340,6 +340,72 @@ def interpolate_spectrogram(ybin, data, **kwargs):
     return zz, opt
 
 
+def get_raster_spectrogram(y, z, Ny=None, ylog=False, zlog=False,
+                           zmin=None, zmax=None, cmap=None):
+    import PIL
+    from numpy import ma
+    from scipy import interpolate
+    from matplotlib import cm, colors
+
+    def interp(x, y, newx):
+        f = interpolate.interp1d(x, y, axis=0, kind='nearest',
+                                 bounds_error=False, fill_value=None)
+        return f(newx)
+
+    # default colormap
+    if cmap is None:
+        cmap = 'viridis'
+
+    Nx = z.shape[0]
+
+    # twice the original
+    if Ny is None:
+        Ny = z.shape[1] * 2
+
+    # y can be 2D for time-varying bins
+    if y.ndim == 1:
+        y0 = y[ 0]
+        y1 = y[-1]
+        yy = np.tile(y, (Nx,1))
+    elif y.ndim == 2:
+        y0 = y[ 0,:].min()
+        y1 = y[-1,:].max()
+        yy = y
+    else:
+        raise ValueError('Error: invalid input')
+
+    # set new bin
+    if ylog:
+        ybin = np.logspace(np.log10(y0), np.log10(y1), Ny)
+    else:
+        ybin = np.linspace(y0, y1, Ny)
+
+    # interpolation in y
+    zz = np.zeros((Nx, Ny), np.float64)
+    for ii in range(Nx):
+        zz[ii,:] = interp(yy[ii,:], z[ii,:], ybin)
+
+    # preprocess
+    if zlog:
+        zind = np.logical_and(np.isfinite(zz), np.greater(zz, 0.0))
+        zmin = zz[zind].min() if zmin is None else zmin
+        zmax = zz[zind].max() if zmax is None else zmax
+        norm = colors.LogNorm(vmin=zmin, vmax=zmax)
+    else:
+        zind = np.isfinite(zz)
+        zmin = zz[zind].min() if zmin is None else zmin
+        zmax = zz[zind].max() if zmax is None else zmax
+        norm = colors.Normalize(vmin=zmin, vmax=zmax)
+
+    # get rasterized image
+    zmask = ma.masked_array(zz, mask=~zind)
+    colormap = cm.get_cmap(cmap)
+    rgbarray = np.uint8(colormap(norm(zmask[:,::-1].T))*255)
+    pilimage = PIL.Image.fromarray(rgbarray)
+
+    return dict(image=pilimage, y0=y0, y1=y1, ybin=ybin, norm=norm)
+
+
 def time_slice(var, t1, t2):
     t1 = pd.Timestamp(t1).timestamp()
     t2 = pd.Timestamp(t2).timestamp()
