@@ -8,14 +8,17 @@ import warnings
 
 import copy
 import numpy as np
+import numpy.ma as ma
+import scipy as sp
+import scipy.interpolate as interpolate
 import pandas as pd
 import xarray as xr
+import PIL
 
 try:
     import pytplot
 except:
     pytplot = None
-
 
 _default_layout = {
     'dpi'           : 300,
@@ -342,9 +345,6 @@ def interpolate_spectrogram(ybin, data, **kwargs):
 
 def get_raster_spectrogram(y, z, Ny=None, ylog=False, zlog=False,
                            zmin=None, zmax=None, cmap=None):
-    import PIL
-    from numpy import ma
-    from scipy import interpolate
     from matplotlib import cm, colors
 
     def interp(x, y, newx):
@@ -356,6 +356,7 @@ def get_raster_spectrogram(y, z, Ny=None, ylog=False, zlog=False,
     if cmap is None:
         cmap = 'viridis'
 
+    # keep structure in the first dimension (time)
     Nx = z.shape[0]
 
     # twice the original
@@ -403,7 +404,29 @@ def get_raster_spectrogram(y, z, Ny=None, ylog=False, zlog=False,
     rgbarray = np.uint8(colormap(norm(zmask[:,::-1].T))*255)
     pilimage = PIL.Image.fromarray(rgbarray)
 
-    return dict(image=pilimage, y0=y0, y1=y1, ybin=ybin, norm=norm)
+    # return other parameters as a dict
+    opt = dict(y0=y0, y1=y1, ybin=ybin, zmin=zmin, zmax=zmax, norm=norm)
+
+    return pilimage, opt
+
+def get_raster_colorbar(N=None, cmap=None):
+    from matplotlib import cm, colors
+
+    # default size of lut
+    if N is None:
+        N = 256
+
+    # default colormap
+    if cmap is None:
+        cmap = 'viridis'
+
+    # get rasterized image of N x 1
+    z = np.linspace(0.0, 1.0, N)[::-1,None]
+    colormap = cm.get_cmap(cmap)
+    rgbarray = np.uint8(colormap(z)*255)
+    pilimage = PIL.Image.fromarray(rgbarray)
+
+    return pilimage
 
 
 def time_slice(var, t1, t2):
