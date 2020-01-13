@@ -35,6 +35,7 @@ def generate_stack(var, **options):
         'width'    : options['width'],
         'height'   : options['height'],
         'margin'   : dict(t=0, b=0, l=0, r=0, pad=0, autoexpand=False),
+        'plot_bgcolor' : '#fff',
     }
     bbox = options['bbox_relative']
 
@@ -46,7 +47,8 @@ def generate_stack(var, **options):
         y1 = bbox['y1'][j]
         j0 = '%d' % (num_plots)
         jj = '%d' % (j+1)
-        figure_layout['xaxis' + jj] = dict(domain=[x0, x1], anchor='y' + j0)
+        #figure_layout['xaxis' + jj] = dict(domain=[x0, x1], anchor='y' + j0)
+        figure_layout['xaxis' + jj] = dict(domain=[x0, x1], matches='x' + j0, anchor='y' + jj)
         figure_layout['yaxis' + jj] = dict(domain=[y0, y1])
 
     figure = go.Figure(layout=figure_layout)
@@ -57,7 +59,10 @@ def generate_stack(var, **options):
     for j in range(num_plots):
         j0 = '%d' % (num_plots)
         jj = '%d' % (j+1)
-        axs.append(dict(x='x' + j0,
+        axs.append(dict(n=j+1,
+                        p=num_plots,
+                        #x='x' + j0,
+                        x='x' + jj,
                         y='y' + jj,
                         xaxis=figure.layout['xaxis' + jj],
                         yaxis=figure.layout['yaxis' + jj]))
