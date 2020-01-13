@@ -47,9 +47,11 @@ def generate_stack(var, **options):
         y1 = bbox['y1'][j]
         j0 = '%d' % (num_plots)
         jj = '%d' % (j+1)
-        #figure_layout['xaxis' + jj] = dict(domain=[x0, x1], anchor='y' + j0)
-        figure_layout['xaxis' + jj] = dict(domain=[x0, x1], matches='x' + j0, anchor='y' + jj)
-        figure_layout['yaxis' + jj] = dict(domain=[y0, y1])
+        figure_layout['xaxis' + jj] = dict(domain=[x0, x1],
+                                           anchor='y' + jj,
+                                           matches='x' + j0)
+        figure_layout['yaxis' + jj] = dict(domain=[y0, y1],
+                                           anchor='x' + jj)
 
     figure = go.Figure(layout=figure_layout)
     figure.__dict__['_legend'] = [None]*num_plots # hack !
@@ -62,8 +64,8 @@ def generate_stack(var, **options):
         axs.append(dict(numaxes=j+1,
                         x='x' + jj,
                         y='y' + jj,
-                        xaxis=figure.layout['xaxis' + jj],
-                        yaxis=figure.layout['yaxis' + jj]))
+                        xaxis='xaxis' + jj,
+                        yaxis='yaxis' + jj))
 
     # plot
     for j in range(num_plots):

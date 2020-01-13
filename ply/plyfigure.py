@@ -71,7 +71,7 @@ def _convert_color(color):
         raise ValueError('unrecognized color format: %s' % (color))
 
 
-def _get_colormap(cmap):
+def _get_colormap(cmap, table=True):
     cmaptable = {
         'jet'      : _mpl_jet,
         'bwr'      : _mpl_bwr,
@@ -79,7 +79,7 @@ def _get_colormap(cmap):
     }
     if isinstance(cmap, list) and len(cmap) == 1:
         cmap = cmap[0]
-    if isinstance(cmap, str) and cmap in cmaptable:
+    if table and isinstance(cmap, str) and cmap in cmaptable:
         cmap = cmaptable[cmap]
     return cmap
 
@@ -87,6 +87,10 @@ def _get_colormap(cmap):
 def _get_utcoffset():
     import dateutil.tz
     return dateutil.tz.tzlocal().utcoffset(0).total_seconds() * 1.0e+3
+
+
+def _get_domain(figure, axis):
+    return figure.layout[axis]['domain']
 
 
 def _get_legend_label(x, y, text, **opts):
@@ -138,8 +142,14 @@ class BaseFigure(object):
         )
         if self.opt['xtime']:
             xaxis.update(self.get_date_options())
-        self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
-        self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
+
+        ####
+        # now update axes
+        layout = {
+            self.axes['xaxis'] : xaxis,
+            self.axes['yaxis'] : yaxis,
+        }
+        self.figure.update_layout(**layout)
 
     def get_opt(self, key, val=None):
         return get_plot_option(self.data, key, val)
@@ -187,8 +197,8 @@ class BaseFigure(object):
         nl = len(self.figure._legend[na])
         ts = self.opt['ticklength']/self.opt['width']
         fs = self.opt['fontsize']/self.opt['width']
-        xx = self.axes['xaxis']['domain'][1] + 2.0*ts
-        yy = self.axes['yaxis']['domain'][1] - 0.5*fs
+        xx = _get_domain(self.figure, self.axes['xaxis'])[1] + 2.0*ts
+        yy = _get_domain(self.figure, self.axes['yaxis'])[1] - 0.5*fs
         x0 = xx
         y0 = yy - nl*fs
         x1 = x0 + 2.0*fs
@@ -273,12 +283,17 @@ class FigureLine(BaseFigure):
         xaxis = dict(font)
         if self.get_opt('trange', None) is not None:
             xaxis['range'] = pd_to_datetime(self.get_opt('trange'))
-        self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
 
         yaxis = dict(font, title_text=self.get_opt('ylabel'))
         if self.get_opt('yrange', None) is not None:
             yaxis['range'] = self.get_opt('yrange')
-        self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
+
+        # now update axes
+        layout = {
+            self.axes['xaxis'] : xaxis,
+            self.axes['yaxis'] : yaxis,
+        }
+        self.figure.update_layout(**layout)
 
 
 class FigureSpec(BaseFigure):
@@ -296,10 +311,12 @@ class FigureSpec(BaseFigure):
 
         cb_size = self.opt['colorbar_size'] / self.opt['width']
         cb_sep  = self.opt['colorbar_sep']  / self.opt['width']
-        xcb0 = self.axes['xaxis']['domain'][1] + cb_sep
+        xdom = _get_domain(self.figure, self.axes['xaxis'])
+        ydom = _get_domain(self.figure, self.axes['yaxis'])
+        xcb0 = xdom[1] + cb_sep
         xcb1 = cb_size + xcb0
-        ycb0 = self.axes['yaxis']['domain'][0]
-        ycb1 = self.axes['yaxis']['domain'][1]
+        ycb0 = ydom[0]
+        ycb1 = ydom[1]
         xaxis_cb = dict(
             domain=[xcb0, xcb1],
             range=[0, 1],
@@ -316,7 +333,7 @@ class FigureSpec(BaseFigure):
         yaxis_cb = dict(
             domain=[ycb0, ycb1],
             range=[0, 1],
-            #tickvals=[],
+            tickvals=[],
             linewidth=self.opt['line_width'],
             linecolor='#000',
             mirror=True,
@@ -337,10 +354,6 @@ class FigureSpec(BaseFigure):
         self.figure.update_layout(**layout_option)
 
     def buildfigure(self):
-        def _get_colormap(cmap):
-            if isinstance(cmap, list) and len(cmap) == 1:
-                cmap = cmap[0]
-            return cmap
         data = self.data
 
         t = data.time.values
@@ -351,7 +364,7 @@ class FigureSpec(BaseFigure):
         zlog = self.get_opt('ztype', 'linear') == 'log'
 
         # colormap and range
-        cmap = _get_colormap(self.get_opt('colormap'))
+        cmap = _get_colormap(self.get_opt('colormap'), False)
         zmin, zmax = self.get_opt('zrange', [None, None])
 
         # rasterized spectrogram
@@ -365,8 +378,8 @@ class FigureSpec(BaseFigure):
         im_spectrogram, opt = get_raster_spectrogram(y, z, **kwargs)
 
         offset = _get_utcoffset()
-        xdom = self.axes['xaxis']['domain']
-        ydom = self.axes['yaxis']['domain']
+        xdom = _get_domain(self.figure, self.axes['xaxis'])
+        ydom = _get_domain(self.figure, self.axes['yaxis'])
         xp = int((xdom[1] - xdom[0])*self.opt['width'])  * 4
         yp = int((ydom[1] - ydom[0])*self.opt['height']) * 4
         im = im_spectrogram.resize([xp, yp], PIL.Image.NEAREST)
@@ -395,50 +408,54 @@ class FigureSpec(BaseFigure):
         self.figure.add_layout_image(image)
 
         # update axes
-        self.xlim = [x0, x1]
-        self.ylim = [y0, y1]
-        self.zlim = [z0, z1]
         self.update_axes()
 
         # colorbar
-        im_colorbar = get_raster_colorbar(cmap=cmap)
-        image_opt = {
-            'source'  : im_colorbar,
-            'xref'    : self.axes_cb['x'],
-            'yref'    : self.axes_cb['y'],
-            'x'       : 0,
-            'y'       : np.log10(z1),
-            'sizex'   : 1,
-            'sizey'   : np.log10(z1) - np.log10(z0),
-            'sizing'  : 'stretch',
-            'opacity' : 1.0,
-            'layer'   : 'below',
-        }
-        image = go.layout.Image(**image_opt)
-        self.figure.add_layout_image(image)
-        self.set_colorbar()
+        zlabel = self.get_opt('zlabel', '')
+        self.set_colorbar(zmin=z0, zmax=z1, zlabel=zlabel, zlog=zlog, cmap=cmap)
 
-    def set_colorbar(self):
-        zlog = self.get_opt('ztype', 'linear') == 'log'
+    def set_colorbar(self, zmin, zmax, zlabel, zlog, cmap):
         font = dict(titlefont_size=self.opt['fontsize'],
                     tickfont_size=self.opt['fontsize'])
 
         yaxis = dict(font)
         if zlog:
             yaxis['type'] = 'log'
+            z0 = np.log10(zmin)
+            z1 = np.log10(zmax)
+        else:
+            z0 = zmin
+            z1 = zmax
 
-        yaxis['title_text'] = self.get_opt('zlabel', '')
+        # rasterized colorbar image
+        im_colorbar = get_raster_colorbar(cmap=cmap)
+        image_opt = {
+            'source'  : im_colorbar,
+            'xref'    : self.axes_cb['x'],
+            'yref'    : self.axes_cb['y'],
+            'x'       : 0,
+            'y'       : z1,
+            'sizex'   : 1,
+            'sizey'   : z1 - z0,
+            'sizing'  : 'stretch',
+            'opacity' : 1.0,
+            'layer'   : 'below',
+        }
+        image = go.layout.Image(**image_opt)
+        self.figure.add_layout_image(image)
 
+        # label
+        yaxis['title_text'] = zlabel
+
+        # ticks
         if self.get_opt('colorbar_ticks', None) is None:
             if zlog:
-                y0 = np.log10(self.zlim[0])
-                y1 = np.log10(self.zlim[1])
-                ymin = np.ceil(y0)
-                ymax = np.floor(y1)
+                z0 = np.ceil(z0)
+                z1 = np.floor(z1)
 
                 # TODO: need a cleverer way
-                ntick = int(np.rint(y1 - y0)) + 1
-                ticks = np.linspace(ymin, ymax, ntick)
+                ntick = int(np.rint(z1 - z0)) + 1
+                ticks = np.linspace(z0, z1, ntick)
 
                 tickvals = [0]*ntick
                 ticktext = [0]*ntick
@@ -448,7 +465,10 @@ class FigureSpec(BaseFigure):
 
                 yaxis['tickvals'] = tickvals
                 yaxis['ticktext'] = ticktext
-                yaxis['range'] = [ymin, ymax]
+                yaxis['range'] = [z0, z1]
+            else:
+                # leave it handled by plotly
+                pass
         else:
             # ticks are provided
             opt = self.get_opt('colorbar_ticks')
@@ -459,13 +479,55 @@ class FigureSpec(BaseFigure):
                 if tickvals.shape == ticktext.shape and tickvals.ndim == 1:
                     yaxis['tickvals'] = tickvals
                     yaxis['ticktext'] = ticktext
-                    yaxis['range'] = self.zlim
+                    yaxis['range'] = [z0, z1]
                 else:
                     print('Error: tickvals and ticktext are not consistent')
             else:
                 print('Error: tickvals or ticktext are not given')
 
-        self.figure.update_layout({self.axes_cb['yaxis'] : yaxis})
+        layout = {
+            self.axes_cb['yaxis'] : yaxis,
+        }
+        self.figure.update_layout(**layout)
+
+    def update_axes(self):
+        if self.opt['numplot'] != 0:
+            return
+
+        font = dict(titlefont_size=self.opt['fontsize'],
+                    tickfont_size=self.opt['fontsize'])
+
+        xaxis = dict(font)
+        if self.get_opt('trange', None) is not None:
+            xaxis['range'] = pd_to_datetime(self.get_opt('trange'))
+
+        yaxis = dict(font, title_text=self.get_opt('ylabel'))
+        if self.get_opt('ytype', 'linear') == 'log':
+            # log scale in y
+            if self.get_opt('yrange', None) is not None:
+                yrange = [np.log10(yr) for yr in self.get_opt('yrange')]
+            else:
+                y = self.plotdata['y']
+                yrange = [np.log10(y.min()), np.log10(y.max())]
+            # ticks
+            ylogmin = int(np.ceil(yrange[0]))
+            ylogmax = int(np.floor(yrange[1]))
+            ticks   = 10**np.arange(ylogmin, ylogmax+1)
+            yaxis['range'] = yrange
+            yaxis.update(self.get_ylog_options(ticks))
+        else:
+            # linear scale in y
+            if self.get_opt('yrange', None) is not None:
+                yaxis['range'] = self.get_opt('yrange')
+            else:
+                yaxis['range'] = [y.min(), y.max()]
+
+        # now update axes
+        layout = {
+            self.axes['xaxis'] : xaxis,
+            self.axes['yaxis'] : yaxis,
+        }
+        self.figure.update_layout(**layout)
 
     def _buildfigure(self):
         data = self.data
@@ -533,40 +595,6 @@ class FigureSpec(BaseFigure):
 
         # update axes
         self.update_axes()
-
-    def update_axes(self):
-        if self.opt['numplot'] != 0:
-            return
-
-        font = dict(titlefont_size=self.opt['fontsize'],
-                    tickfont_size=self.opt['fontsize'])
-
-        xaxis = dict(font)
-        if self.get_opt('trange', None) is not None:
-            xaxis['range'] = pd_to_datetime(self.get_opt('trange'))
-        self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
-
-        yaxis = dict(font, title_text=self.get_opt('ylabel'))
-        if self.get_opt('ytype', 'linear') == 'log':
-            # log scale in y
-            if self.get_opt('yrange', None) is not None:
-                yrange = [np.log10(yr) for yr in self.get_opt('yrange')]
-            else:
-                y = self.plotdata['y']
-                yrange = [np.log10(y.min()), np.log10(y.max())]
-            # ticks
-            ylogmin = int(np.ceil(yrange[0]))
-            ylogmax = int(np.floor(yrange[1]))
-            ticks   = 10**np.arange(ylogmin, ylogmax+1)
-            yaxis['range'] = yrange
-            yaxis.update(self.get_ylog_options(ticks))
-        else:
-            # linear scale in y
-            if self.get_opt('yrange', None) is not None:
-                yaxis['range'] = self.get_opt('yrange')
-            else:
-                yaxis['range'] = [y.min(), y.max()]
-        self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
 
 
 class FigureAlt(BaseFigure):

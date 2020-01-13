@@ -491,12 +491,13 @@ class MSVD:
             psd  = dadict['psd'].values
             psd  = ma.masked_where(np.isnan(psd), psd)
             ndec = 7
-            zmax = np.ceil(np.log10(psd.max()))
-            zmin = zmax - ndec
+            zmax = 10.0**np.ceil(np.log10(psd.max()))
+            zmin = 10.0**(zmax - ndec)
             colorbar_ticks = {
                 'tickvals' : np.linspace(zmin, zmax, ndec+1),
                 'ticktext' : np.linspace(zmin, zmax, ndec+1, dtype=np.int32),
             }
+            colorbar_ticks = None
             set_plot_option(dadict['psd'],
                             zlabel='PSD [nT^2/Hz]',
                             ztype='log',
