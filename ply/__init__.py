@@ -59,9 +59,7 @@ def generate_stack(var, **options):
     for j in range(num_plots):
         j0 = '%d' % (num_plots)
         jj = '%d' % (j+1)
-        axs.append(dict(n=j+1,
-                        p=num_plots,
-                        #x='x' + j0,
+        axs.append(dict(numaxes=j+1,
                         x='x' + jj,
                         y='y' + jj,
                         xaxis=figure.layout['xaxis' + jj],
@@ -81,6 +79,12 @@ def generate_stack(var, **options):
                 obj = cls(dat[k], figure, axs[j],
                           numaxes=j, numplot=k, **options)
                 obj.buildfigure()
+
+    # show ticks only for the bottom
+    opt = dict()
+    for j in range(num_plots-1):
+        opt['xaxis%d' % (j+1)] = dict(showticklabels=False)
+    figure.update_layout(**opt)
 
     if 'title' in options:
         title = {

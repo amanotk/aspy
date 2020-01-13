@@ -84,6 +84,11 @@ def _get_colormap(cmap):
     return cmap
 
 
+def _get_utcoffset():
+    import dateutil.tz
+    return dateutil.tz.tzlocal().utcoffset(0).total_seconds() * 1.0e+3
+
+
 def _get_legend_label(x, y, text, **opts):
     r = go.layout.Annotation(x=x, y=y, text=text, showarrow=False,
                              xref='paper', yref='paper',
@@ -141,6 +146,7 @@ class BaseFigure(object):
 
     def get_date_options(self):
         opt = {
+            'type' : 'date',
             'tickformatstops' : [
                 dict(dtickrange=[None, 1000], value="%M:%S.%L"),
                 dict(dtickrange=[1000, 60000], value="%H:%M:%S"),
@@ -277,138 +283,56 @@ class FigureLine(BaseFigure):
 
 class FigureSpec(BaseFigure):
     def setup_default_axes(self):
-        x = 'x%d' % (self.opt['numaxes']+1)
-        y = 'y%d' % (self.opt['numaxes']+1)
-        xaxis = 'xaxis%d' % (self.axes['n'])
-        yaxis = 'yaxis%d' % (self.axes['n'])
-        anchor = self.axes['xaxis']['anchor']
-        # image layer
-        self.axes_img = dict(
-            x=x + _axis_suffix_img,
-            y=y + _axis_suffix_img,
-            xaxis=xaxis + _axis_suffix_img,
-            yaxis=yaxis + _axis_suffix_img,
+        # setup primary axes
+        BaseFigure.setup_default_axes(self)
+
+        # setup colorbar axes
+        self.axes_cb = dict(
+            x='x%d%s' % (self.axes['numaxes'], _axis_suffix_cb1),
+            y='y%d%s' % (self.axes['numaxes'], _axis_suffix_cb1),
+            xaxis='xaxis%d%s' % (self.axes['numaxes'], _axis_suffix_cb1),
+            yaxis='yaxis%d%s' % (self.axes['numaxes'], _axis_suffix_cb1),
         )
-        # colorbar
-        self.axes_cb1 = dict(
-            x=x + _axis_suffix_cb1,
-            y=y + _axis_suffix_cb1,
-            xaxis=xaxis + _axis_suffix_cb1,
-            yaxis=yaxis + _axis_suffix_cb1,
-        )
-        # colorbar image layer
-        self.axes_cb2 = dict(
-            x=x + _axis_suffix_cb2,
-            y=y + _axis_suffix_cb2,
-            xaxis=xaxis + _axis_suffix_cb2,
-            yaxis=yaxis + _axis_suffix_cb2,
-        )
-        # options for primary axes
-        xaxis_opt = dict(
-            linewidth=self.opt['line_width'],
-            linecolor='#000',
-            side='bottom',
-            ticks='outside',
-            mirror='allticks',
-            showline=True,
-            showticklabels=True,
-            showgrid=False,
-            #anchor=x + _axis_suffix_img,
-            overlaying=x + _axis_suffix_img,
-        )
-        yaxis_opt = dict(
-            linewidth=self.opt['line_width'],
-            linecolor='#000',
-            side='left',
-            ticks='outside',
-            mirror='allticks',
-            showline=True,
-            showticklabels=True,
-            showgrid=False,
-            #anchor=y + _axis_suffix_img,
-            overlaying=y + _axis_suffix_img,
-        )
-        # options for image layer
-        xaxis_img_opt = dict(
-            domain=self.axes['xaxis']['domain'],
-            #matches=self.axes['x'],
-            range=[0, 1],
-            tickvals=[],
-            linewidth=1,
-            linecolor='#000',
-            mirror='all',
-            showgrid=False,
-            showline=True,
-            #scaleanchor=self.axes['x'],
-        )
-        yaxis_img_opt = dict(
-            domain=self.axes['yaxis']['domain'],
-            #matches=self.axes['y'],
-            range=[0, 1],
-            tickvals=[],
-            linewidth=1,
-            linecolor='#000',
-            mirror='all',
-            showgrid=False,
-            showline=True,
-            #scaleanchor=self.axes['y'],
-            #anchor=self.axes['y'],
-        )
-        # options for colorbar
-        xaxis_cb1_opt = dict(
-            linewidth=self.opt['line_width'],
-            linecolor='#000',
-            tickvals=[],
-            showline=True,
-            showgrid=False,
-            #anchor=self.axes_cb2['xaxis'],
-            #overlaying=self.axes_cb2['xaxis'],
-        )
-        yaxis_cb1_opt = dict(
-            linewidth=self.opt['line_width'],
-            linecolor='#000',
-            ticks='outside',
-            side='right',
-            showline=True,
-            showticklabels=True,
-            showgrid=False,
-            #anchor=self.axes_cb2['yaxis'],
-            #overlaying=self.axes_cb2['yaxis'],
-        )
-        # options for colorbar image layer
+
         cb_size = self.opt['colorbar_size'] / self.opt['width']
         cb_sep  = self.opt['colorbar_sep']  / self.opt['width']
         xcb0 = self.axes['xaxis']['domain'][1] + cb_sep
         xcb1 = cb_size + xcb0
         ycb0 = self.axes['yaxis']['domain'][0]
         ycb1 = self.axes['yaxis']['domain'][1]
-        xaxis_cb2_opt = dict(
-            #anchor=self.axes_cb2['yaxis'],
+        xaxis_cb = dict(
             domain=[xcb0, xcb1],
             range=[0, 1],
             tickvals=[],
+            linewidth=self.opt['line_width'],
+            linecolor='#000',
+            mirror=True,
+            showline=True,
+            showticklabels=False,
             showgrid=False,
+            fixedrange=True,
+            anchor=self.axes_cb['y'],
         )
-        yaxis_cb2_opt = dict(
+        yaxis_cb = dict(
             domain=[ycb0, ycb1],
             range=[0, 1],
-            tickvals=[],
+            #tickvals=[],
+            linewidth=self.opt['line_width'],
+            linecolor='#000',
+            mirror=True,
+            ticks='outside',
+            side='right',
+            showline=True,
+            showticklabels=True,
             showgrid=False,
+            fixedrange=True,
+            anchor=self.axes_cb['x'],
         )
-
-        if self.opt['xtime']:
-            xaxis_opt.update(self.get_date_options())
 
         # update layout
         layout_option = {
-            xaxis : xaxis_opt,
-            yaxis : yaxis_opt,
-            self.axes_img['xaxis'] : xaxis_img_opt,
-            self.axes_img['yaxis'] : yaxis_img_opt,
-            self.axes_cb1['xaxis'] : xaxis_cb1_opt,
-            self.axes_cb1['yaxis'] : yaxis_cb1_opt,
-            self.axes_cb2['xaxis'] : xaxis_cb2_opt,
-            self.axes_cb2['yaxis'] : yaxis_cb2_opt,
+            self.axes_cb['xaxis'] : xaxis_cb,
+            self.axes_cb['yaxis'] : yaxis_cb,
         }
         self.figure.update_layout(**layout_option)
 
@@ -440,80 +364,108 @@ class FigureSpec(BaseFigure):
         }
         im_spectrogram, opt = get_raster_spectrogram(y, z, **kwargs)
 
+        offset = _get_utcoffset()
         xdom = self.axes['xaxis']['domain']
         ydom = self.axes['yaxis']['domain']
-        xp = int((xdom[1] - xdom[0])*self.opt['width'])
-        yp = int((ydom[1] - ydom[0])*self.opt['height'])
-        im = im_spectrogram.resize([xp,yp], PIL.Image.NEAREST)
-        x0 = x[ 0] - 0.5*(x[+1] - x[ 0])
-        x1 = x[-1] + 0.5*(x[-1] - x[-2])
+        xp = int((xdom[1] - xdom[0])*self.opt['width'])  * 4
+        yp = int((ydom[1] - ydom[0])*self.opt['height']) * 4
+        im = im_spectrogram.resize([xp, yp], PIL.Image.NEAREST)
+        t0 = t[ 0] - 0.5*(t[+1] - t[ 0])
+        t1 = t[-1] + 0.5*(t[-1] - t[-2])
+        x0 = t0 * 1.0e+3 - offset
+        x1 = t1 * 1.0e+3 - offset
         y0 = opt['y0']
         y1 = opt['y1']
         z0 = opt['zmin']
         z1 = opt['zmax']
 
-        if 0:
-            image_opt = {
-                'source'  : im,
-                'xref'    : self.axes_img['x'],
-                'yref'    : self.axes_img['y'],
-                'x'       : 0,
-                'y'       : 1,
-                'sizex'   : 1,
-                'sizey'   : 1,
-                'sizing'  : 'stretch',
-                'opacity' : 1.0,
-                'layer'   : 'below',
-            }
-            image = go.layout.Image(**image_opt)
-            self.figure.add_layout_image(image)
-
-            self.figure.update_xaxes(range=[0, 1], selector=self.axes_img['xaxis'])
-            self.figure.update_yaxes(range=[0, 1], selector=self.axes_img['yaxis'])
-        else:
-            import dateutil.tz
-            offset = dateutil.tz.tzlocal().utcoffset(0).total_seconds() * 1.0e+3
-            ximg0 = t[ 0] * 1.0e+3 - offset
-            ximg1 = t[-1] * 1.0e+3 - offset
-            image_opt = {
-                'source'  : im,
-                'xref'    : self.axes['x'],
-                'yref'    : self.axes['y'],
-                'x'       : ximg0,
-                'y'       : np.log10(y1),
-                'sizex'   : ximg1 - ximg0,
-                'sizey'   : np.log10(y1) - np.log10(y0),
-                'sizing'  : 'stretch',
-                'opacity' : 1.0,
-                'layer'   : 'below',
-            }
-            image = go.layout.Image(**image_opt)
-            self.figure.add_layout_image(image)
-
-            xaxis = dict()
-            if self.get_opt('trange', None) is not None:
-                xaxis['range'] = pd_to_datetime(self.get_opt('trange'))
-                xaxis['type'] = 'date'
-                self.figure.update_xaxes(**xaxis, selector=self.axes['xaxis'])
-
-            yaxis = dict(range=[np.log10(y0), np.log10(y1)], type='log')
-            #yaxis = dict(range=[y0, y1])
-            self.figure.update_yaxes(**yaxis, selector=self.axes['yaxis'])
-
-        # add empty trace
-        if 0:
-            opt = dict(xaxis=self.axes['x'],
-                       yaxis=self.axes['y'],
-                       showlegend=False,
-                       #mode='markers',
-                       mode='lines',
-                       marker_opacity=0,
-                       x=[x0, x1],
-                       y=[y0, y1])
-            self.figure.add_trace(go.Scatter(**opt))
+        image_opt = {
+            'source'  : im,
+            'xref'    : self.axes['x'],
+            'yref'    : self.axes['y'],
+            'x'       : x0,
+            'y'       : np.log10(y1),
+            'sizex'   : x1 - x0,
+            'sizey'   : np.log10(y1) - np.log10(y0),
+            'sizing'  : 'stretch',
+            'opacity' : 1.0,
+            'layer'   : 'below',
+        }
+        image = go.layout.Image(**image_opt)
+        self.figure.add_layout_image(image)
 
         # update axes
+        self.xlim = [x0, x1]
+        self.ylim = [y0, y1]
+        self.zlim = [z0, z1]
         self.update_axes()
+
+        # colorbar
+        im_colorbar = get_raster_colorbar(cmap=cmap)
+        image_opt = {
+            'source'  : im_colorbar,
+            'xref'    : self.axes_cb['x'],
+            'yref'    : self.axes_cb['y'],
+            'x'       : 0,
+            'y'       : np.log10(z1),
+            'sizex'   : 1,
+            'sizey'   : np.log10(z1) - np.log10(z0),
+            'sizing'  : 'stretch',
+            'opacity' : 1.0,
+            'layer'   : 'below',
+        }
+        image = go.layout.Image(**image_opt)
+        self.figure.add_layout_image(image)
+        self.set_colorbar()
+
+    def set_colorbar(self):
+        zlog = self.get_opt('ztype', 'linear') == 'log'
+        font = dict(titlefont_size=self.opt['fontsize'],
+                    tickfont_size=self.opt['fontsize'])
+
+        yaxis = dict(font)
+        if zlog:
+            yaxis['type'] = 'log'
+
+        yaxis['title_text'] = self.get_opt('zlabel', '')
+
+        if self.get_opt('colorbar_ticks', None) is None:
+            if zlog:
+                y0 = np.log10(self.zlim[0])
+                y1 = np.log10(self.zlim[1])
+                ymin = np.ceil(y0)
+                ymax = np.floor(y1)
+
+                # TODO: need a cleverer way
+                ntick = int(np.rint(y1 - y0)) + 1
+                ticks = np.linspace(ymin, ymax, ntick)
+
+                tickvals = [0]*ntick
+                ticktext = [0]*ntick
+                for i in range(ntick):
+                    tickvals[i] = 10.0**ticks[i]
+                    ticktext[i] = '10<sup>%+d</sup>' % (int(ticks[i]))
+
+                yaxis['tickvals'] = tickvals
+                yaxis['ticktext'] = ticktext
+                yaxis['range'] = [ymin, ymax]
+        else:
+            # ticks are provided
+            opt = self.get_opt('colorbar_ticks')
+            if 'tickvals' in opt and 'ticktext' in opt:
+                tickvals = np.atleast_1d(opt['tickvals'])
+                ticktext = np.atleast_1d(opt['ticktext'])
+                # check
+                if tickvals.shape == ticktext.shape and tickvals.ndim == 1:
+                    yaxis['tickvals'] = tickvals
+                    yaxis['ticktext'] = ticktext
+                    yaxis['range'] = self.zlim
+                else:
+                    print('Error: tickvals and ticktext are not consistent')
+            else:
+                print('Error: tickvals or ticktext are not given')
+
+        self.figure.update_layout({self.axes_cb['yaxis'] : yaxis})
 
     def _buildfigure(self):
         data = self.data
