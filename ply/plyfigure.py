@@ -14,9 +14,7 @@ import plotly.graph_objects as go
 from ..utils import *
 
 # suffix
-_axis_suffix_img = '00'
-_axis_suffix_cb1 = '000'
-_axis_suffix_cb2 = '001'
+_axis_suffix_cb = '000'
 
 _mpl_jet = \
 [
@@ -303,10 +301,10 @@ class FigureSpec(BaseFigure):
 
         # setup colorbar axes
         self.axes_cb = dict(
-            x='x%d%s' % (self.axes['numaxes'], _axis_suffix_cb1),
-            y='y%d%s' % (self.axes['numaxes'], _axis_suffix_cb1),
-            xaxis='xaxis%d%s' % (self.axes['numaxes'], _axis_suffix_cb1),
-            yaxis='yaxis%d%s' % (self.axes['numaxes'], _axis_suffix_cb1),
+            x='x%d%s' % (self.axes['numaxes'], _axis_suffix_cb),
+            y='y%d%s' % (self.axes['numaxes'], _axis_suffix_cb),
+            xaxis='xaxis%d%s' % (self.axes['numaxes'], _axis_suffix_cb),
+            yaxis='yaxis%d%s' % (self.axes['numaxes'], _axis_suffix_cb),
         )
 
         cb_size = self.opt['colorbar_size'] / self.opt['width']
@@ -377,16 +375,14 @@ class FigureSpec(BaseFigure):
         }
         im_spectrogram, opt = get_raster_spectrogram(y, z, **kwargs)
 
-        offset = _get_utcoffset()
         xdom = _get_domain(self.figure, self.axes['xaxis'])
         ydom = _get_domain(self.figure, self.axes['yaxis'])
         xp = int((xdom[1] - xdom[0])*self.opt['width'])  * 4
         yp = int((ydom[1] - ydom[0])*self.opt['height']) * 4
         im = im_spectrogram.resize([xp, yp], PIL.Image.NEAREST)
-        t0 = t[ 0] - 0.5*(t[+1] - t[ 0])
-        t1 = t[-1] + 0.5*(t[-1] - t[-2])
-        x0 = t0 * 1.0e+3 - offset
-        x1 = t1 * 1.0e+3 - offset
+        x0 = x[ 0] - 0.5*(x[+1] - x[ 0])
+        x1 = x[-1] + 0.5*(x[-1] - x[-2])
+        dx = (x1 - x0).total_seconds() * 1.0e+3
         y0 = opt['y0']
         y1 = opt['y1']
         z0 = opt['zmin']
@@ -398,7 +394,7 @@ class FigureSpec(BaseFigure):
             'yref'    : self.axes['y'],
             'x'       : x0,
             'y'       : np.log10(y1),
-            'sizex'   : x1 - x0,
+            'sizex'   : dx,
             'sizey'   : np.log10(y1) - np.log10(y0),
             'sizing'  : 'stretch',
             'opacity' : 1.0,
