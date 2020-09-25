@@ -18,11 +18,13 @@ from .mplfigure import \
 
 
 def _matplotlib_change_style(params):
-    current = matplotlib.rcParams.copy()
-    params  = params.copy()
-    if 'backend' in params:
-        params.pop('backend')
-    matplotlib.rcParams.update(params)
+    from matplotlib.cbook import _suppress_matplotlib_deprecation_warning
+    with _suppress_matplotlib_deprecation_warning():
+        current = matplotlib.rcParams.copy()
+        params  = params.copy()
+        if 'backend' in params:
+            params.pop('backend')
+        matplotlib.rcParams.update(params)
     return current
 
 
