@@ -25,6 +25,11 @@ def _get_colormap(cmap):
     return cmap
 
 
+def _log_formatter(x, p):
+    d = int(np.rint(np.log10(x)))
+    return r'$\mathregular{10^{%+d}}$' % (d)
+
+
 def get_point_size(s, dpi):
     return s*72/dpi
 
@@ -216,6 +221,15 @@ class FigureLine(BaseFigure):
 
 
 class FigureSpec(BaseFigure):
+    def create_background_axes(self, ax):
+        bg = ax.twinx()
+        for sp in bg.spines.values():
+            sp.set_visible(False)
+        bg.yaxis.set_ticks([])
+        ax.set_zorder(bg.get_zorder()+1)
+        ax.patch.set_visible(False)
+        return bg
+
     def setup_default_axes(self):
         # tick options
         opt = {
@@ -223,23 +237,36 @@ class FigureSpec(BaseFigure):
             'pad'       : self.opt['tickpad'],
             'length'    : self.opt['ticklength'],
             'width'     : self.opt['tickwidth'],
-            'top'       : True,
-            'bottom'    : True,
-            'left'      : True,
-            'right'     : True,
         }
-        self.axes.xaxis.set_tick_params(**opt)
-        self.axes.yaxis.set_tick_params(**opt)
-        # colorbar size and sep should be fraction unit
+
+        # primary axes
+        self.axes.xaxis.set_tick_params(top=True, bottom=True, **opt)
+        self.axes.yaxis.set_tick_params(left=True, right=True, **opt)
+
+        # colorbar axes; size and sep should be in fraction unit
         cbsep  = self.opt['colorbar_sep']  / self.opt['width']
         cbsize = self.opt['colorbar_size'] / self.opt['width']
         self.cbax = create_colorbar_axes(self.axes, size=cbsize, sep=cbsep)
-        self.cbax.xaxis.set_tick_params(**opt)
-        self.cbax.yaxis.set_tick_params(**opt)
+        self.cbax.xaxis.set_tick_params(top=False, bottom=False, **opt)
+        self.cbax.yaxis.set_tick_params(left=True, right=True, **opt)
         for ax in (self.axes, self.cbax):
             for axis in ['top','bottom','left','right']:
                 ax.spines[axis].set_linewidth(self.opt['line_width'])
         self.set_xdate()
+
+        # background axes
+        self.axes_bg = self.create_background_axes(self.axes)
+        self.axes_bg.xaxis.set_tick_params(top=False, bottom=False, **opt)
+        self.axes_bg.yaxis.set_tick_params(left=True, right=True, **opt)
+        self.cbax_bg = self.create_background_axes(self.cbax)
+        self.cbax_bg.xaxis.set_tick_params(top=True, bottom=True, **opt)
+        self.cbax_bg.yaxis.set_tick_params(left=True, right=True, **opt)
+        self.cbax_bg.xaxis.set_ticks([])
+
+        # colorbar tick and labels
+        self.cbax_bg.yaxis.tick_left()
+        self.cbax.yaxis.tick_right()
+        self.cbax.yaxis.set_label_position('right')
 
     def buildfigure(self):
         data = self.data
@@ -251,54 +278,51 @@ class FigureSpec(BaseFigure):
         ylog = self.get_opt('ytype', 'linear') == 'log'
         zlog = self.get_opt('ztype', 'linear') == 'log'
 
-        zz, opt = interpolate_spectrogram(y, z, ylog=ylog)
-        if zlog:
-            cond = np.logical_or(np.isnan(zz), np.less_equal(zz, 0.0))
-            zz = np.log10(ma.masked_where(cond, zz))
-
         # colormap and range
-        zmin, zmax = self.get_opt('zrange', [None, None])
         cmap = _get_colormap(self.get_opt('colormap'))
+        zmin, zmax = self.get_opt('zrange', [None, None])
 
-        zmin = np.floor(zz.min() if zmin is None else zmin)
-        zmax = np.ceil (zz.max() if zmax is None else zmax)
-        norm = matplotlib.colors.Normalize(vmin=zmin, vmax=zmax)
+        # rasterized spectrogram
+        kwargs = {
+            'ylog' : ylog,
+            'zlog' : zlog,
+            'zmin' : zmin,
+            'zmax' : zmax,
+            'cmap' : cmap,
+        }
+        im_spectrogram, opt = get_raster_spectrogram(y, z, **kwargs)
+        y0 = opt['y0']
+        y1 = opt['y1']
+        z0 = opt['zmin']
+        z1 = opt['zmax']
 
         # plot
         x0 = mpldates.date2num(x[ 0] - 0.5*(x[+1] - x[ 0]))
         x1 = mpldates.date2num(x[-1] + 0.5*(x[-1] - x[-2]))
-        xx = np.linspace(x0, x1, zz.shape[0]+1)
-        yy = opt['bine']
-        opt_pcolormesh = {
-            'norm'       : norm,
-            'cmap'       : cmap,
-            'rasterized' : True,
+        opt_imshow = {
+            'aspect' : 'auto',
+            'extent' : [x0, x1, 0, 1],
         }
-        im = self.axes.pcolormesh(xx, yy, zz.T, **opt_pcolormesh)
+        # TODO: resizing may be needed depending on resolution
+        im = self.axes_bg.imshow(np.asarray(im_spectrogram), **opt_imshow)
 
         # update axes
+        self.xlim = [x0, x1]
+        self.ylim = [y0, y1]
+        self.zlim = [z0, z1]
         self.update_axes()
 
         # colorbar
-        cb = plt.colorbar(im, cax=self.cbax, drawedges=False)
-        cb.outline.set_linewidth(self.opt['line_width'])
+        im_colorbar = get_raster_colorbar(cmap=cmap)
+        opt_imshow = {
+            'aspect' : 'auto',
+            'extent' : [0, 1, 0, 1],
+        }
+        im = self.cbax_bg.imshow(np.asarray(im_colorbar), **opt_imshow)
+
         self.cbax.set_ylabel(self.get_opt('zlabel', ''),
                              fontsize=self.opt['fontsize'])
-        self.set_colorbar_ticks(cb)
-
-    def set_log_ticks(self, axis):
-        # put major ticks for each decade
-        def f(x, p):
-            d = int(np.rint(np.log10(x)))
-            return r'$\mathregular{10^{%+d}}$' % (d)
-        ymin = self.data.coords['spec_bins'].values.min()
-        ymax = self.data.coords['spec_bins'].values.max()
-        decs = np.arange(np.ceil(np.log10(ymin)), np.ceil(np.log10(ymax)), 1)
-        ticks = 10.0**decs
-        majorloc = matplotlib.ticker.FixedLocator(ticks)
-        majorfmt = matplotlib.ticker.FuncFormatter(f)
-        axis.set_major_locator(majorloc)
-        axis.set_major_formatter(majorfmt)
+        self.set_colorbar_ticks()
 
     def update_axes(self):
         if self.opt['numplot'] != 0:
@@ -311,9 +335,14 @@ class FigureSpec(BaseFigure):
         if self.get_opt('yrange', None) is not None:
             yrange = self.get_opt('yrange')
             self.axes.set_ylim(yrange)
+        else:
+            self.axes.set_ylim(self.ylim)
+
         if self.get_opt('ytype', 'linear') == 'log':
             self.axes.set_yscale('log')
-            self.set_log_ticks(self.axes.yaxis)
+            self.set_yticks(ylog=True)
+        else:
+            self.set_yticks(ylog=False)
 
         self.axes.set_ylabel(self.get_opt('ylabel', ''),
                              fontsize=self.opt['fontsize'])
@@ -321,23 +350,85 @@ class FigureSpec(BaseFigure):
         # TODO: minor ticks
         self.axes.tick_params(axis='x', which='minor', length=0, width=0)
         self.axes.tick_params(axis='y', which='minor', length=0, width=0)
+        self.cbax.tick_params(axis='y', which='minor', length=0, width=0)
 
-    def set_colorbar_ticks(self, cb):
-        if self.get_opt('colorbar_ticks', None) is None:
-            return
-
-        opt = self.get_opt('colorbar_ticks')
-        if 'tickvals' in opt and 'ticktext' in opt:
-            tickvals = opt['tickvals']
-            ticktext = opt['ticktext']
-            # check
-            if tickvals.shape == ticktext.shape and tickvals.ndim == 1:
-                cb.set_ticks(tickvals)
-                cb.set_ticklabels(ticktext)
-            else:
-                print('Error: tickvals and ticktext are not consistent')
+    def set_yticks(self, ylog=False):
+        if ylog:
+            self.set_ylog_ticks()
         else:
-            print('Error: tickvals or ticktext are not given')
+            self.set_ylinear_ticks()
+
+    def set_ylinear_ticks(self):
+        # get ticks for primary axes
+        y0 = np.log10(self.ylim[0])
+        y1 = np.log10(self.ylim[1])
+        loc = self.axes.yaxis.get_major_locator()
+        tickvals = loc.tick_values(y0, y1)
+
+        # background axes
+        tickvals = (ticks - y0)/(y1 - y0)
+        loc_bg = matplotlib.ticker.FixedLocator(ticks)
+        fmt_bg = matplotlib.ticker.NullFormatter()
+        self.axes_bg.yaxis.set_major_locator(loc_bg)
+        self.axes_bg.yaxis.set_major_formatter(fmt_bg)
+
+    def set_ylog_ticks(self):
+        y0 = np.log10(self.ylim[0])
+        y1 = np.log10(self.ylim[1])
+        ymin = np.ceil(y0)
+        ymax = np.floor(y1)
+
+        # TODO: need a cleverer way
+        ntick = int(np.rint(y1 - y0))
+
+        # primary axes
+        tickvals = 10.0**(np.linspace(ymin, ymax, ntick))
+        loc = matplotlib.ticker.FixedLocator(tickvals)
+        fmt = matplotlib.ticker.FuncFormatter(_log_formatter)
+        self.axes.yaxis.set_major_locator(loc)
+        self.axes.yaxis.set_major_formatter(fmt)
+
+        # background axes
+        tickvals = (np.log10(tickvals) - y0)/(y1 - y0)
+        loc_bg = matplotlib.ticker.FixedLocator(tickvals)
+        fmt_bg = matplotlib.ticker.NullFormatter()
+        self.axes_bg.yaxis.set_major_locator(loc_bg)
+        self.axes_bg.yaxis.set_major_formatter(fmt_bg)
+
+    def set_colorbar_ticks(self):
+        if self.get_opt('ztype', 'linear') == 'log':
+            self.cbax.set_yscale('log')
+
+        if self.get_opt('colorbar_ticks', None) is None:
+            # automatically determine ticks
+            if self.get_opt('ztype', 'linear') == 'log':
+                loc = self.cbax.yaxis.get_major_locator()
+                fmt = matplotlib.ticker.FuncFormatter(_log_formatter)
+            else:
+                loc = matplotlib.ticker.AutoLocator()
+                fmt = matplotlib.ticker.ScalarFormatter()
+            tickvals = loc.tick_values(self.zlim[0], self.zlim[1])
+            ticktext = []
+            for v in tickvals:
+                ticktext.append(fmt(v))
+            self.cbax.yaxis.set_ticks(tickvals)
+            self.cbax.yaxis.set_ticklabels(ticktext)
+            self.cbax.set_ylim(self.zlim)
+        else:
+            # ticks are provided
+            opt = self.get_opt('colorbar_ticks')
+            if 'tickvals' in opt and 'ticktext' in opt:
+                tickvals = np.atleast_1d(opt['tickvals'])
+                ticktext = np.atleast_1d(opt['ticktext'])
+                # check
+                if tickvals.shape == ticktext.shape and tickvals.ndim == 1:
+                    self.cbax.yaxis.set_ticks(tickvals)
+                    self.cbax.yaxis.set_ticklabels(ticktext)
+                    self.cbax.set_ylim(self.zlim)
+                else:
+                    print('Error: tickvals and ticktext are not consistent')
+            else:
+                print('Error: tickvals or ticktext are not given')
 
 
 class FigureAlt(BaseFigure):

@@ -8,14 +8,17 @@ import warnings
 
 import copy
 import numpy as np
+import numpy.ma as ma
+import scipy as sp
+import scipy.interpolate as interpolate
 import pandas as pd
 import xarray as xr
+import PIL
 
 try:
     import pytplot
 except:
     pytplot = None
-
 
 _default_layout = {
     'dpi'           : 300,
@@ -338,6 +341,92 @@ def interpolate_spectrogram(ybin, data, **kwargs):
     opt = dict(y0=y0, y1=y1, bine=bine, binc=binc)
 
     return zz, opt
+
+
+def get_raster_spectrogram(y, z, Ny=None, ylog=False, zlog=False,
+                           zmin=None, zmax=None, cmap=None):
+    from matplotlib import cm, colors
+
+    def interp(x, y, newx):
+        f = interpolate.interp1d(x, y, axis=0, kind='nearest',
+                                 bounds_error=False, fill_value=None)
+        return f(newx)
+
+    # default colormap
+    if cmap is None:
+        cmap = 'viridis'
+
+    # keep structure in the first dimension (time)
+    Nx = z.shape[0]
+
+    # twice the original
+    if Ny is None:
+        Ny = z.shape[1] * 2
+
+    # y can be 2D for time-varying bins
+    if y.ndim == 1:
+        y0 = y[ 0]
+        y1 = y[-1]
+        yy = np.tile(y, (Nx,1))
+    elif y.ndim == 2:
+        y0 = y[ 0,:].min()
+        y1 = y[-1,:].max()
+        yy = y
+    else:
+        raise ValueError('Error: invalid input')
+
+    # set new bin
+    if ylog:
+        ybin = np.logspace(np.log10(y0), np.log10(y1), Ny)
+    else:
+        ybin = np.linspace(y0, y1, Ny)
+
+    # interpolation in y
+    zz = np.zeros((Nx, Ny), np.float64)
+    for ii in range(Nx):
+        zz[ii,:] = interp(yy[ii,:], z[ii,:], ybin)
+
+    # preprocess
+    if zlog:
+        zind = np.logical_and(np.isfinite(zz), np.greater(zz, 0.0))
+        zmin = zz[zind].min() if zmin is None else zmin
+        zmax = zz[zind].max() if zmax is None else zmax
+        norm = colors.LogNorm(vmin=zmin, vmax=zmax)
+    else:
+        zind = np.isfinite(zz)
+        zmin = zz[zind].min() if zmin is None else zmin
+        zmax = zz[zind].max() if zmax is None else zmax
+        norm = colors.Normalize(vmin=zmin, vmax=zmax)
+
+    # get rasterized image
+    zmask = ma.masked_array(zz, mask=~zind)
+    colormap = cm.get_cmap(cmap)
+    rgbarray = np.uint8(colormap(norm(zmask[:,::-1].T))*255)
+    pilimage = PIL.Image.fromarray(rgbarray)
+
+    # return other parameters as a dict
+    opt = dict(y0=y0, y1=y1, ybin=ybin, zmin=zmin, zmax=zmax, norm=norm)
+
+    return pilimage, opt
+
+def get_raster_colorbar(N=None, cmap=None):
+    from matplotlib import cm, colors
+
+    # default size of lut
+    if N is None:
+        N = 256
+
+    # default colormap
+    if cmap is None:
+        cmap = 'viridis'
+
+    # get rasterized image of N x 1
+    z = np.linspace(0.0, 1.0, N)[::-1,None]
+    colormap = cm.get_cmap(cmap)
+    rgbarray = np.uint8(colormap(z)*255)
+    pilimage = PIL.Image.fromarray(rgbarray)
+
+    return pilimage
 
 
 def time_slice(var, t1, t2):
