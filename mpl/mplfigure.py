@@ -271,8 +271,8 @@ class FigureSpec(BaseFigure):
     def buildfigure(self):
         data = self.data
 
-        t = data.time.values
-        x = pd_to_datetime(t)
+        x = data.time.values
+        t = pd_to_datetime(x)
         y = data.coords['spec_bins'].values
         z = data.values
         ylog = self.get_opt('ytype', 'linear') == 'log'
@@ -282,6 +282,13 @@ class FigureSpec(BaseFigure):
         cmap = _get_colormap(self.get_opt('colormap'))
         zmin, zmax = self.get_opt('zrange', [None, None])
 
+        # bounding box in pixels
+        numaxes = self.opt['numaxes']
+        bbox_x0 = self.opt['bbox_pixels']['x0'][numaxes]
+        bbox_x1 = self.opt['bbox_pixels']['x1'][numaxes]
+        bbox_y0 = self.opt['bbox_pixels']['y0'][numaxes]
+        bbox_y1 = self.opt['bbox_pixels']['y1'][numaxes]
+
         # rasterized spectrogram
         kwargs = {
             'ylog' : ylog,
@@ -289,27 +296,30 @@ class FigureSpec(BaseFigure):
             'zmin' : zmin,
             'zmax' : zmax,
             'cmap' : cmap,
+            'width' : bbox_x1 - bbox_x0,
+            'height' : bbox_y1 - bbox_y0,
         }
-        im_spectrogram, opt = get_raster_spectrogram(y, z, **kwargs)
-        y0 = opt['y0']
-        y1 = opt['y1']
-        z0 = opt['zmin']
-        z1 = opt['zmax']
+        im_spectrogram, opt = get_ds_raster_spectrogram(x, y, z, **kwargs)
+        xmin = opt['xmin']
+        xmax = opt['xmax']
+        ymin = opt['ymin']
+        ymax = opt['ymax']
+        zmin = opt['zmin']
+        zmax = opt['zmax']
 
         # plot
-        x0 = mpldates.date2num(x[ 0] - 0.5*(x[+1] - x[ 0]))
-        x1 = mpldates.date2num(x[-1] + 0.5*(x[-1] - x[-2]))
+        tmin = mpldates.date2num(pd_to_datetime(xmin))[0]
+        tmax = mpldates.date2num(pd_to_datetime(xmax))[0]
         opt_imshow = {
             'aspect' : 'auto',
-            'extent' : [x0, x1, 0, 1],
+            'extent' : [tmin, tmax, 0, 1],
         }
-        # TODO: resizing may be needed depending on resolution
         im = self.axes_bg.imshow(np.asarray(im_spectrogram), **opt_imshow)
 
         # update axes
-        self.xlim = [x0, x1]
-        self.ylim = [y0, y1]
-        self.zlim = [z0, z1]
+        self.xlim = [xmin, xmax]
+        self.ylim = [ymin, ymax]
+        self.zlim = [zmin, zmax]
         self.update_axes()
 
         # colorbar

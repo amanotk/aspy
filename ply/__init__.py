@@ -98,8 +98,13 @@ def generate_stack(var, **options):
             'yanchor'   : 'bottom',
         }
         figure.update_layout(title=title)
+
     if 'trange' in options:
-        figure.update_xaxes(range=pd_to_datetime(options['trange']))
+        trange = pd_to_datetime(options['trange'])
+        layout = dict()
+        for j in range(num_plots):
+            layout['xaxis%d' % (j+1)] = {'range' : trange}
+        figure.update_layout(**layout)
 
     if is_ipython():
         figure.show()

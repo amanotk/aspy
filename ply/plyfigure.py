@@ -354,8 +354,8 @@ class FigureSpec(BaseFigure):
     def buildfigure(self):
         data = self.data
 
-        t = data.time.values
-        x = pd_to_datetime(t)
+        x = data.time.values
+        t = pd_to_datetime(x)
         y = data.coords['spec_bins'].values
         z = data.values
         ylog = self.get_opt('ytype', 'linear') == 'log'
@@ -365,6 +365,13 @@ class FigureSpec(BaseFigure):
         cmap = _get_colormap(self.get_opt('colormap'), False)
         zmin, zmax = self.get_opt('zrange', [None, None])
 
+        # bounding box in pixels
+        numaxes = self.opt['numaxes']
+        bbox_x0 = self.opt['bbox_pixels']['x0'][numaxes]
+        bbox_x1 = self.opt['bbox_pixels']['x1'][numaxes]
+        bbox_y0 = self.opt['bbox_pixels']['y0'][numaxes]
+        bbox_y1 = self.opt['bbox_pixels']['y1'][numaxes]
+
         # rasterized spectrogram
         kwargs = {
             'ylog' : ylog,
@@ -372,30 +379,29 @@ class FigureSpec(BaseFigure):
             'zmin' : zmin,
             'zmax' : zmax,
             'cmap' : cmap,
+            'width' : bbox_x1 - bbox_x0,
+            'height' : bbox_y1 - bbox_y0,
         }
-        im_spectrogram, opt = get_raster_spectrogram(y, z, **kwargs)
+        im_spectrogram, opt = get_ds_raster_spectrogram(x, y, z, **kwargs)
 
-        xdom = _get_domain(self.figure, self.axes['xaxis'])
-        ydom = _get_domain(self.figure, self.axes['yaxis'])
-        xp = int((xdom[1] - xdom[0])*self.opt['width'])  * 4
-        yp = int((ydom[1] - ydom[0])*self.opt['height']) * 4
-        im = im_spectrogram.resize([xp, yp], PIL.Image.NEAREST)
-        x0 = x[ 0] - 0.5*(x[+1] - x[ 0])
-        x1 = x[-1] + 0.5*(x[-1] - x[-2])
-        dx = (x1 - x0).total_seconds() * 1.0e+3
-        y0 = opt['y0']
-        y1 = opt['y1']
-        z0 = opt['zmin']
-        z1 = opt['zmax']
+        xmin = opt['xmin']
+        xmax = opt['xmax']
+        ymin = opt['ymin']
+        ymax = opt['ymax']
+        zmin = opt['zmin']
+        zmax = opt['zmax']
+        tmin = pd_to_datetime(xmin)[0]
+        tmax = pd_to_datetime(xmax)[0]
+        delt = (tmax - tmin).total_seconds() * 1.0e+3
 
         image_opt = {
-            'source'  : im,
+            'source'  : im_spectrogram,
             'xref'    : self.axes['x'],
             'yref'    : self.axes['y'],
-            'x'       : x0,
-            'y'       : np.log10(y1),
-            'sizex'   : dx,
-            'sizey'   : np.log10(y1) - np.log10(y0),
+            'x'       : tmin,
+            'y'       : np.log10(ymax),
+            'sizex'   : delt,
+            'sizey'   : np.log10(ymax) - np.log10(ymin),
             'sizing'  : 'stretch',
             'opacity' : 1.0,
             'layer'   : 'below',
@@ -408,20 +414,18 @@ class FigureSpec(BaseFigure):
 
         # colorbar
         zlabel = self.get_opt('zlabel', '')
-        self.set_colorbar(zmin=z0, zmax=z1, zlabel=zlabel, zlog=zlog, cmap=cmap)
+        self.set_colorbar(zmin=zmin, zmax=zmax, zlabel=zlabel, zlog=zlog, cmap=cmap)
 
     def set_colorbar(self, zmin, zmax, zlabel, zlog, cmap):
         font = dict(titlefont_size=self.opt['fontsize'],
                     tickfont_size=self.opt['fontsize'])
 
+        xaxis = dict()
         yaxis = dict(font)
         if zlog:
             yaxis['type'] = 'log'
-            z0 = np.log10(zmin)
-            z1 = np.log10(zmax)
-        else:
-            z0 = zmin
-            z1 = zmax
+            zmin = np.log10(zmin)
+            zmax = np.log10(zmax)
 
         # rasterized colorbar image
         im_colorbar = get_raster_colorbar(cmap=cmap)
@@ -430,9 +434,9 @@ class FigureSpec(BaseFigure):
             'xref'    : self.axes_cb['x'],
             'yref'    : self.axes_cb['y'],
             'x'       : 0,
-            'y'       : z1,
+            'y'       : zmax,
             'sizex'   : 1,
-            'sizey'   : z1 - z0,
+            'sizey'   : zmax - zmin,
             'sizing'  : 'stretch',
             'opacity' : 1.0,
             'layer'   : 'below',
@@ -446,8 +450,8 @@ class FigureSpec(BaseFigure):
         # ticks
         if self.get_opt('colorbar_ticks', None) is None:
             if zlog:
-                z0 = np.ceil(z0)
-                z1 = np.floor(z1)
+                z0 = np.ceil(zmin)
+                z1 = np.floor(zmax)
 
                 # TODO: need a cleverer way
                 ntick = int(np.rint(z1 - z0)) + 1
@@ -461,7 +465,7 @@ class FigureSpec(BaseFigure):
 
                 yaxis['tickvals'] = tickvals
                 yaxis['ticktext'] = ticktext
-                yaxis['range'] = [z0, z1]
+                yaxis['range'] = [zmin, zmax]
             else:
                 # leave it handled by plotly
                 pass
@@ -475,13 +479,14 @@ class FigureSpec(BaseFigure):
                 if tickvals.shape == ticktext.shape and tickvals.ndim == 1:
                     yaxis['tickvals'] = tickvals
                     yaxis['ticktext'] = ticktext
-                    yaxis['range'] = [z0, z1]
+                    yaxis['range'] = [zmin, zmax]
                 else:
                     print('Error: tickvals and ticktext are not consistent')
             else:
                 print('Error: tickvals or ticktext are not given')
 
         layout = {
+            self.axes_cb['xaxis'] : xaxis,
             self.axes_cb['yaxis'] : yaxis,
         }
         self.figure.update_layout(**layout)
@@ -524,73 +529,6 @@ class FigureSpec(BaseFigure):
             self.axes['yaxis'] : yaxis,
         }
         self.figure.update_layout(**layout)
-
-    def _buildfigure(self):
-        data = self.data
-        font = dict(titlefont_size=self.opt['fontsize'],
-                    tickfont_size=self.opt['fontsize'])
-
-        t = data.time.values
-        y = data.coords['spec_bins'].values
-        z = data.values
-        ylog = self.get_opt('ytype', 'linear') == 'log'
-        zlog = self.get_opt('ztype', 'linear') == 'log'
-
-        zz, opt = interpolate_spectrogram(y, z, ylog=ylog)
-        if zlog:
-            cond = np.logical_or(np.isnan(zz), np.less_equal(zz, 0.0))
-            zz = np.log10(ma.masked_where(cond, zz))
-
-        # colorbar
-        layout = self.figure.layout
-        xdom = self.axes['xaxis']['domain']
-        ydom = self.axes['yaxis']['domain']
-        xpos = xdom[1]
-        ypos = ydom[0]
-        xlen = self.opt['colorbar_size']
-        ylen = ydom[1] - ydom[0]
-        xpad = self.opt['colorbar_sep']
-        ypad = 0
-
-        cb = dict(font,
-                  x=xpos, y=ypos, xpad=xpad, ypad=ypad, yanchor='bottom',
-                  thickness=xlen, thicknessmode='pixels',
-                  len=ylen, lenmode='fraction',
-                  outlinewidth=self.opt['line_width'],
-                  title=self.get_opt('zlabel'),
-                  titleside='right',
-                  ticks='outside')
-
-        # colormap and range
-        zmin, zmax = self.get_opt('zrange', [None, None])
-        cmap = _get_colormap(self.get_opt('colormap'))
-
-        zmin = np.floor(zz.min() if zmin is None else zmin)
-        zmax = np.ceil (zz.max() if zmax is None else zmax)
-
-        # heatmap
-        t0 = t[ 0] - 0.5*(t[+1] - t[ 0])
-        t1 = t[-1] + 0.5*(t[-1] - t[-2])
-        tt = np.linspace(t0, t1, zz.shape[0]+1)
-        xx = pd_to_datetime(tt)
-        yy = opt['bine']
-
-        if isinstance(zz, ma.MaskedArray):
-            zz = zz.filled(-np.inf)
-
-        opt = dict(name='',
-                   xaxis=self.axes['x'],
-                   yaxis=self.axes['y'],
-                   colorscale=cmap,
-                   colorbar=cb,
-                   zmin=zmin,
-                   zmax=zmax)
-        hm = go.Heatmap(z=zz.T, x=xx, y=yy, **opt)
-        self.figure.add_trace(hm)
-        self.plotdata = dict(x=xx, y=yy, z=zz)
-
-        # update axes
-        self.update_axes()
 
 
 class FigureAlt(BaseFigure):

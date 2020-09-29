@@ -13,6 +13,7 @@ import scipy as sp
 import scipy.interpolate as interpolate
 import pandas as pd
 import xarray as xr
+import datashader
 import PIL
 
 try:
@@ -343,6 +344,96 @@ def interpolate_spectrogram(ybin, data, **kwargs):
     return zz, opt
 
 
+def get_ds_raster_spectrogram(x, y, z, **kwargs):
+    from matplotlib import cm
+    shade = datashader.transfer_functions.shade
+
+    cmap = kwargs.get('cmap', 'viridis')
+    ylog = kwargs.get('ylog', False)
+    zlog = kwargs.get('zlog', False)
+    xmin = kwargs.get('xmin', np.nanmin(x))
+    xmax = kwargs.get('xmax', np.nanmax(x))
+    ymin = kwargs.get('ymin', np.nanmin(y))
+    ymax = kwargs.get('ymax', np.nanmax(y))
+    zmin = kwargs.get('zmin', None)
+    zmax = kwargs.get('zmax', None)
+    width = kwargs.get('width', None)
+    height = kwargs.get('height', None)
+
+    # asjust array shape
+    zz = z.T
+    Ny, Nx = zz.shape
+
+    if x.ndim == 1:
+        xx = np.tile(x[None,:], (Ny, 1))
+    elif x.ndim == 2:
+        xx = x.T
+    else:
+        raise ValueError('invalid shape of x')
+
+    if y.ndim == 1:
+        yy = np.tile(y[:,None], (1, Nx))
+    elif y.ndim == 2:
+        yy = y.T
+    else:
+        raise ValueError('invalid shape of y')
+
+    # preprocess
+    if ylog:
+        yy   = np.log10(yy)
+        ymin = np.log10(ymin)
+        ymax = np.log10(ymax)
+
+    if zlog:
+        zz   = np.log10(zz)
+        zz   = np.where(np.isinf(zz), np.nan, zz)
+        zmin = np.nanmin(zz) if zmin is None else np.log10(zmin)
+        zmax = np.nanmax(zz) if zmax is None else np.log10(zmax)
+    else:
+        zmin = np.nanmin(zz) if zmin is None else zmin
+        zmax = np.nanmax(zz) if zmax is None else zmax
+
+    # rasterization via datashader
+    data = xr.DataArray(zz, name='z',
+                        dims=['ydim', 'xdim'],
+                        coords={'y' : (['ydim', 'xdim'], yy),
+                                'x' : (['ydim', 'xdim'], xx)})
+    canvas_opts = {
+        'x_range' : (xmin, xmax),
+        'y_range' : (ymin, ymax),
+        'plot_width' : int(width),
+        'plot_height' : int(height),
+    }
+    canvas = datashader.Canvas(**canvas_opts)
+
+    shade_opts = {
+        'how' : 'linear',
+        'cmap' : cm.get_cmap(cmap),
+        'span' : [zmin, zmax],
+    }
+    image = shade(canvas.quadmesh(data, x='x', y='y'), **shade_opts).to_pil()
+
+    # return other parameters as a dict
+    if ylog:
+        ymin = 10**ymin
+        ymax = 10**ymax
+
+    if zlog:
+        zmin = 10**zmin
+        zmax = 10**zmax
+
+    opt = {
+        'xmin' : xmin,
+        'xmax' : xmax,
+        'ymin' : ymin,
+        'ymax' : ymax,
+        'zmin' : zmin,
+        'zmax' : zmax,
+    }
+
+    return image, opt
+
+
 def get_raster_spectrogram(y, z, Ny=None, ylog=False, zlog=False,
                            zmin=None, zmax=None, cmap=None):
     from matplotlib import cm, colors
@@ -410,7 +501,7 @@ def get_raster_spectrogram(y, z, Ny=None, ylog=False, zlog=False,
     return pilimage, opt
 
 def get_raster_colorbar(N=None, cmap=None):
-    from matplotlib import cm, colors
+    from matplotlib import cm
 
     # default size of lut
     if N is None:
