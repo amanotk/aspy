@@ -151,6 +151,18 @@ class BaseFigure(object):
     def get_opt(self, key, val=None):
         return get_plot_option(self.data, key, val)
 
+    def get_xrange(self):
+        return self.axes.get_xlim()
+
+    def get_yrange(self):
+        return self.axes.get_ylim()
+
+    def set_xrange(self, xrange):
+        self.axes.set_xlim(xrange)
+
+    def set_yrange(self, yrange):
+        self.axes.set_ylim(yrange)
+
     def buildfigure(self):
         pass
 
@@ -208,26 +220,27 @@ class FigureLine(BaseFigure):
             self.axes.legend(**legend_opt)
 
     def update_axes(self):
-        if self.opt['numplot'] != 0:
-            return
-
         if self.get_opt('trange', None) is not None:
             self.axes.set_xlim(pd_to_datetime(self.get_opt('trange')))
 
         if self.get_opt('yrange', None) is not None:
             self.axes.set_ylim(self.get_opt('yrange'))
-        self.axes.set_ylabel(self.get_opt('ylabel', ''),
-                             fontsize=self.opt['fontsize'])
+
+        if self.opt['numplot'] == 0:
+            self.axes.set_ylabel(self.get_opt('ylabel', ''),
+                                 fontsize=self.opt['fontsize'])
 
 
 class FigureSpec(BaseFigure):
-    def create_background_axes(self, ax):
+    def create_background_axes(self, ax, **opt):
         bg = ax.twinx()
         for sp in bg.spines.values():
             sp.set_visible(False)
         bg.yaxis.set_ticks([])
         ax.set_zorder(bg.get_zorder()+1)
         ax.patch.set_visible(False)
+        bg.xaxis.set_tick_params(top=False, bottom=False, **opt)
+        bg.yaxis.set_tick_params(left=False, right=False, **opt)
         return bg
 
     def setup_default_axes(self):
@@ -255,12 +268,8 @@ class FigureSpec(BaseFigure):
         self.set_xdate()
 
         # background axes
-        self.axes_bg = self.create_background_axes(self.axes)
-        self.axes_bg.xaxis.set_tick_params(top=False, bottom=False, **opt)
-        self.axes_bg.yaxis.set_tick_params(left=True, right=True, **opt)
-        self.cbax_bg = self.create_background_axes(self.cbax)
-        self.cbax_bg.xaxis.set_tick_params(top=True, bottom=True, **opt)
-        self.cbax_bg.yaxis.set_tick_params(left=True, right=True, **opt)
+        self.axes_bg = self.create_background_axes(self.axes, **opt)
+        self.cbax_bg = self.create_background_axes(self.cbax, **opt)
         self.cbax_bg.xaxis.set_ticks([])
 
         # colorbar tick and labels
@@ -335,9 +344,6 @@ class FigureSpec(BaseFigure):
         self.set_colorbar_ticks()
 
     def update_axes(self):
-        if self.opt['numplot'] != 0:
-            return
-
         if self.get_opt('trange', None) is not None:
             self.axes.set_xlim(pd_to_datetime(self.get_opt('trange')))
             self.axes.xaxis_date()
@@ -354,8 +360,9 @@ class FigureSpec(BaseFigure):
         else:
             self.set_yticks(ylog=False)
 
-        self.axes.set_ylabel(self.get_opt('ylabel', ''),
-                             fontsize=self.opt['fontsize'])
+        if self.opt['numplot'] == 0:
+            self.axes.set_ylabel(self.get_opt('ylabel', ''),
+                                 fontsize=self.opt['fontsize'])
 
         # TODO: minor ticks
         self.axes.tick_params(axis='x', which='minor', length=0, width=0)
@@ -370,8 +377,8 @@ class FigureSpec(BaseFigure):
 
     def set_ylinear_ticks(self):
         # get ticks for primary axes
-        y0 = np.log10(self.ylim[0])
-        y1 = np.log10(self.ylim[1])
+        y0 = self.ylim[0]
+        y1 = self.ylim[1]
         loc = self.axes.yaxis.get_major_locator()
         tickvals = loc.tick_values(y0, y1)
 
@@ -397,13 +404,6 @@ class FigureSpec(BaseFigure):
         fmt = matplotlib.ticker.FuncFormatter(_log_formatter)
         self.axes.yaxis.set_major_locator(loc)
         self.axes.yaxis.set_major_formatter(fmt)
-
-        # background axes
-        tickvals = (np.log10(tickvals) - y0)/(y1 - y0)
-        loc_bg = matplotlib.ticker.FixedLocator(tickvals)
-        fmt_bg = matplotlib.ticker.NullFormatter()
-        self.axes_bg.yaxis.set_major_locator(loc_bg)
-        self.axes_bg.yaxis.set_major_formatter(fmt_bg)
 
     def set_colorbar_ticks(self):
         if self.get_opt('ztype', 'linear') == 'log':

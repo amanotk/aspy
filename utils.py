@@ -365,14 +365,14 @@ def get_ds_raster_spectrogram(x, y, z, **kwargs):
     Ny, Nx = zz.shape
 
     if x.ndim == 1:
-        xx = np.tile(x[None,:], (Ny, 1))
+        xx = np.tile(x[np.newaxis,:], (Ny, 1))
     elif x.ndim == 2:
         xx = x.T
     else:
         raise ValueError('invalid shape of x')
 
     if y.ndim == 1:
-        yy = np.tile(y[:,None], (1, Nx))
+        yy = np.tile(y[:,np.newaxis], (1, Nx))
     elif y.ndim == 2:
         yy = y.T
     else:

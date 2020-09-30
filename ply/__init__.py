@@ -75,18 +75,32 @@ def generate_stack(var, **options):
                       numaxes=j, numplot=0, **options)
             obj.buildfigure()
         elif hasattr(var[j], '__iter__'):
+            # first plot
+            k = 0
             dat = var[j]
-            for k in range(len(dat)):
+            cls = get_figure_class(dat[k], classdict)
+            obj = cls(dat[k], figure, axs[j],
+                      numaxes=j, numplot=k, **options)
+            obj.buildfigure()
+            ymin, ymax = obj.get_yrange()
+            # second, third...
+            for k in range(1, len(dat)):
+                # plot
                 cls = get_figure_class(dat[k], classdict)
                 obj = cls(dat[k], figure, axs[j],
                           numaxes=j, numplot=k, **options)
                 obj.buildfigure()
+                # set yrange
+                yrange = obj.get_yrange()
+                ymin = np.minimum(ymin, yrange[0])
+                ymax = np.maximum(ymax, yrange[1])
+                obj.set_yrange([ymin, ymax])
 
     # show ticks only for the bottom
-    opt = dict()
+    layout = dict()
     for j in range(num_plots-1):
-        opt['xaxis%d' % (j+1)] = dict(showticklabels=False)
-    figure.update_layout(**opt)
+        layout['xaxis%d' % (j+1)] = dict(showticklabels=False)
+    figure.update_layout(**layout)
 
     if 'title' in options:
         title = {
@@ -103,7 +117,7 @@ def generate_stack(var, **options):
         trange = pd_to_datetime(options['trange'])
         layout = dict()
         for j in range(num_plots):
-            layout['xaxis%d' % (j+1)] = {'range' : trange}
+            layout['xaxis%d' % (j+1)] = dict(range=trange)
         figure.update_layout(**layout)
 
     if is_ipython():

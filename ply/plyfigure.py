@@ -186,6 +186,24 @@ class BaseFigure(object):
         }
         return opt
 
+    def get_xrange(self):
+        return self.figure.layout[self.axes['xaxis']]['range']
+
+    def get_yrange(self):
+        return self.figure.layout[self.axes['yaxis']]['range']
+
+    def set_xrange(self, xrange):
+        layout = {
+            self.axes['xaxis'] : dict(range=xrange),
+        }
+        self.figure.update_layout(**layout)
+
+    def set_yrange(self, yrange):
+        layout = {
+            self.axes['yaxis'] : dict(range=yrange),
+        }
+        self.figure.update_layout(**layout)
+
     def add_legend(self, label, line):
         # for the first legend
         na   = self.opt['numaxes']
@@ -272,9 +290,6 @@ class FigureLine(BaseFigure):
         self.update_axes()
 
     def update_axes(self):
-        if self.opt['numplot'] != 0:
-            return
-
         font = dict(titlefont_size=self.opt['fontsize'],
                     tickfont_size=self.opt['fontsize'])
 
@@ -282,9 +297,12 @@ class FigureLine(BaseFigure):
         if self.get_opt('trange', None) is not None:
             xaxis['range'] = pd_to_datetime(self.get_opt('trange'))
 
-        yaxis = dict(font, title_text=self.get_opt('ylabel'))
+        yaxis = dict(font)
         if self.get_opt('yrange', None) is not None:
             yaxis['range'] = self.get_opt('yrange')
+
+        if self.opt['numplot'] == 0:
+            yaxis['title_text'] = self.get_opt('ylabel')
 
         # now update axes
         layout = {
@@ -399,8 +417,8 @@ class FigureSpec(BaseFigure):
             'xref'    : self.axes['x'],
             'yref'    : self.axes['y'],
             'x'       : tmin,
-            'y'       : np.log10(ymax),
             'sizex'   : delt,
+            'y'       : np.log10(ymax),
             'sizey'   : np.log10(ymax) - np.log10(ymin),
             'sizing'  : 'stretch',
             'opacity' : 1.0,
@@ -410,6 +428,9 @@ class FigureSpec(BaseFigure):
         self.figure.add_layout_image(image)
 
         # update axes
+        self.xlim = [xmin, xmax]
+        self.ylim = [ymin, ymax]
+        self.zlim = [zmin, zmax]
         self.update_axes()
 
         # colorbar
@@ -492,9 +513,6 @@ class FigureSpec(BaseFigure):
         self.figure.update_layout(**layout)
 
     def update_axes(self):
-        if self.opt['numplot'] != 0:
-            return
-
         font = dict(titlefont_size=self.opt['fontsize'],
                     tickfont_size=self.opt['fontsize'])
 
@@ -502,14 +520,14 @@ class FigureSpec(BaseFigure):
         if self.get_opt('trange', None) is not None:
             xaxis['range'] = pd_to_datetime(self.get_opt('trange'))
 
-        yaxis = dict(font, title_text=self.get_opt('ylabel'))
+        yaxis = dict(font)
         if self.get_opt('ytype', 'linear') == 'log':
             # log scale in y
             if self.get_opt('yrange', None) is not None:
-                yrange = [np.log10(yr) for yr in self.get_opt('yrange')]
+                yrange = self.get_opt('yrange')
+                yrange = [np.log10(yrange[0]), np.log10(yrange[1])]
             else:
-                y = self.plotdata['y']
-                yrange = [np.log10(y.min()), np.log10(y.max())]
+                yrange = [np.log10(self.ylim[0]), np.log10(self.ylim[1])]
             # ticks
             ylogmin = int(np.ceil(yrange[0]))
             ylogmax = int(np.floor(yrange[1]))
@@ -522,6 +540,9 @@ class FigureSpec(BaseFigure):
                 yaxis['range'] = self.get_opt('yrange')
             else:
                 yaxis['range'] = [y.min(), y.max()]
+
+        if self.opt['numplot'] == 0:
+            yaxis['title_text'] = self.get_opt('ylabel')
 
         # now update axes
         layout = {

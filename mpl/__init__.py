@@ -74,12 +74,26 @@ def generate_stack(var, **options):
                       numaxes=j, numplot=0, **options)
             obj.buildfigure()
         elif hasattr(var[j], '__iter__'):
+            # first plot
+            k = 0
             dat = var[j]
-            for k in range(len(dat)):
+            cls = get_figure_class(dat[k], classdict)
+            obj = cls(dat[k], figure, axs[j],
+                      numaxes=j, numplot=k, **options)
+            obj.buildfigure()
+            ymin, ymax = obj.get_yrange()
+            # second, third...
+            for k in range(1, len(dat)):
+                # plot
                 cls = get_figure_class(dat[k], classdict)
                 obj = cls(dat[k], figure, axs[j],
                           numaxes=j, numplot=k, **options)
                 obj.buildfigure()
+                # set yrange
+                yrange = obj.get_yrange()
+                ymin = np.minimum(ymin, yrange[0])
+                ymax = np.maximum(ymax, yrange[1])
+                obj.set_yrange([ymin, ymax])
 
     # show ticks only for the bottom
     for j in range(num_plots-1):
