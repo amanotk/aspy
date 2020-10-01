@@ -319,9 +319,15 @@ class FigureSpec(BaseFigure):
         # plot
         tmin = mpldates.date2num(pd_to_datetime(xmin))[0]
         tmax = mpldates.date2num(pd_to_datetime(xmax))[0]
+
+        if ylog:
+            extent = [tmin, tmax, np.log10(ymin), np.log10(ymax)]
+        else:
+            extent = [tmin, tmax, ymin, ymax]
+
         opt_imshow = {
             'aspect' : 'auto',
-            'extent' : [tmin, tmax, 0, 1],
+            'extent' : extent,
         }
         im = self.axes_bg.imshow(np.asarray(im_spectrogram), **opt_imshow)
 
@@ -350,11 +356,11 @@ class FigureSpec(BaseFigure):
 
         if self.get_opt('yrange', None) is not None:
             yrange = self.get_opt('yrange')
-            self.axes.set_ylim(yrange)
+            self.set_yrange(yrange)
         else:
-            self.axes.set_ylim(self.ylim)
+            self.set_yrange(self.ylim)
 
-        if self.get_opt('ytype', 'linear') == 'log':
+        if self.get_opt('ytype') == 'log':
             self.axes.set_yscale('log')
             self.set_yticks(ylog=True)
         else:
@@ -368,6 +374,13 @@ class FigureSpec(BaseFigure):
         self.axes.tick_params(axis='x', which='minor', length=0, width=0)
         self.axes.tick_params(axis='y', which='minor', length=0, width=0)
         self.cbax.tick_params(axis='y', which='minor', length=0, width=0)
+
+    def set_yrange(self, yrange):
+        self.axes.set_ylim(yrange)
+        if self.get_opt('ytype') == 'log':
+            self.axes_bg.set_ylim([np.log10(yrange[0]), np.log10(yrange[1])])
+        else:
+            self.axes_bg.set_ylim(yrange)
 
     def set_yticks(self, ylog=False):
         if ylog:

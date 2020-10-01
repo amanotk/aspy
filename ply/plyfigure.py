@@ -418,11 +418,13 @@ class FigureSpec(BaseFigure):
             'yref'    : self.axes['y'],
             'x'       : tmin,
             'sizex'   : delt,
-            'y'       : np.log10(ymax),
+            'y'       : np.log10(ymin),
             'sizey'   : np.log10(ymax) - np.log10(ymin),
             'sizing'  : 'stretch',
             'opacity' : 1.0,
             'layer'   : 'below',
+            'xanchor' : 'left',
+            'yanchor' : 'bottom',
         }
         image = go.layout.Image(**image_opt)
         self.figure.add_layout_image(image)

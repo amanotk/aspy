@@ -351,10 +351,6 @@ def get_ds_raster_spectrogram(x, y, z, **kwargs):
     cmap = kwargs.get('cmap', 'viridis')
     ylog = kwargs.get('ylog', False)
     zlog = kwargs.get('zlog', False)
-    xmin = kwargs.get('xmin', np.nanmin(x))
-    xmax = kwargs.get('xmax', np.nanmax(x))
-    ymin = kwargs.get('ymin', np.nanmin(y))
-    ymax = kwargs.get('ymax', np.nanmax(y))
     zmin = kwargs.get('zmin', None)
     zmax = kwargs.get('zmax', None)
     width = kwargs.get('width', None)
@@ -381,8 +377,6 @@ def get_ds_raster_spectrogram(x, y, z, **kwargs):
     # preprocess
     if ylog:
         yy   = np.log10(yy)
-        ymin = np.log10(ymin)
-        ymax = np.log10(ymax)
 
     if zlog:
         zz   = np.log10(zz)
@@ -392,6 +386,13 @@ def get_ds_raster_spectrogram(x, y, z, **kwargs):
     else:
         zmin = np.nanmin(zz) if zmin is None else zmin
         zmax = np.nanmax(zz) if zmax is None else zmax
+
+    xcoord = np.sort(np.unique(xx))
+    ycoord = np.sort(np.unique(yy))
+    xmin = xcoord[ 0] - 0.5*(xcoord[ 1] - xcoord[ 0])
+    xmax = xcoord[-1] + 0.5*(xcoord[-1] - xcoord[-2])
+    ymin = ycoord[ 0] - 0.5*(ycoord[ 1] - ycoord[ 0])
+    ymax = ycoord[-1] + 0.5*(ycoord[-1] - ycoord[-2])
 
     # rasterization via datashader
     data = xr.DataArray(zz, name='z',
