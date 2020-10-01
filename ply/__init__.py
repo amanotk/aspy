@@ -24,6 +24,12 @@ def generate_stack(var, **options):
         'Map'  : FigureMap,
     }
 
+    # enable ipywidgets in jupyter notebook
+    if is_jupyter():
+        Figure = go.FigureWidget
+    else:
+        Figure = go.Figure
+
     var = cast_list(cast_xarray(var))
 
     # get figure layout
@@ -53,7 +59,7 @@ def generate_stack(var, **options):
         figure_layout['yaxis' + jj] = dict(domain=[y0, y1],
                                            anchor='x' + jj)
 
-    figure = go.Figure(layout=figure_layout)
+    figure = Figure(layout=figure_layout)
     figure.__dict__['_legend'] = [None]*num_plots # hack !
 
     # store axes

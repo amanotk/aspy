@@ -379,47 +379,71 @@ class FigureSpec(BaseFigure):
         ylog = self.get_opt('ytype', 'linear') == 'log'
         zlog = self.get_opt('ztype', 'linear') == 'log'
 
-        # colormap and range
-        cmap = _get_colormap(self.get_opt('colormap'), False)
-        zmin, zmax = self.get_opt('zrange', [None, None])
+        # prepare for data to be rasterized
+        kwargs = {
+            'ylog' : ylog,
+            'zlog' : zlog,
+        }
+        self.raster_data = prepare_raster_spectrogram(x, y, z, **kwargs)
 
-        # bounding box in pixels
+        # colormap
+        cmap = _get_colormap(self.get_opt('colormap'), False)
+
+        # xrange
+        x_range = self.get_opt('trange')
+        if x_range is None:
+            x_range = data.attrs['xmin'], data.attrs['xmax']
+        else:
+            x_range = to_unixtime(x_range)
+
+        # yrange
+        y_range = self.get_opt('yrange')
+        if y_range is None:
+            y_range = data.attrs['ymin'], data.attrs['ymax']
+        if ylog:
+            y_range = np.log10(y_range[0]), np.log10(y_range[1])
+
+        # zrange
+        z_range = self.get_opt('zrange')
+        if z_range is None:
+            z_range = data.attrs['zmin'], data.attrs['zmax']
+        if zlog:
+            z_range = np.log10(z_range[0]), np.log10(z_range[1])
+
+        # bounding box and width/height in pixels
         numaxes = self.opt['numaxes']
         bbox_x0 = self.opt['bbox_pixels']['x0'][numaxes]
         bbox_x1 = self.opt['bbox_pixels']['x1'][numaxes]
         bbox_y0 = self.opt['bbox_pixels']['y0'][numaxes]
         bbox_y1 = self.opt['bbox_pixels']['y1'][numaxes]
+        width   = int(bbox_x1 - bbox_x0)
+        height  = int(bbox_y1 - bbox_y0)
 
-        # rasterized spectrogram
+        # rasterize
         kwargs = {
-            'ylog' : ylog,
-            'zlog' : zlog,
-            'zmin' : zmin,
-            'zmax' : zmax,
-            'cmap' : cmap,
-            'width' : bbox_x1 - bbox_x0,
-            'height' : bbox_y1 - bbox_y0,
+            'x_range' : x_range,
+            'y_range' : y_range,
+            'z_range' : z_range,
+            'cmap'    : cmap,
+            'width'   : width,
+            'height'  : height,
         }
-        im_spectrogram, opt = get_ds_raster_spectrogram(x, y, z, **kwargs)
+        img = do_raster_spectrogram(self.raster_data, **kwargs)
 
-        xmin = opt['xmin']
-        xmax = opt['xmax']
-        ymin = opt['ymin']
-        ymax = opt['ymax']
-        zmin = opt['zmin']
-        zmax = opt['zmax']
-        tmin = pd_to_datetime(xmin)[0]
-        tmax = pd_to_datetime(xmax)[0]
+        # show image
+        t_range = pd_to_datetime(x_range)
+        tmin = t_range[0]
+        tmax = t_range[1]
         delt = (tmax - tmin).total_seconds() * 1.0e+3
 
         image_opt = {
-            'source'  : im_spectrogram,
+            'source'  : img,
             'xref'    : self.axes['x'],
             'yref'    : self.axes['y'],
             'x'       : tmin,
             'sizex'   : delt,
-            'y'       : np.log10(ymin),
-            'sizey'   : np.log10(ymax) - np.log10(ymin),
+            'y'       : y_range[0],
+            'sizey'   : y_range[1] - y_range[0],
             'sizing'  : 'stretch',
             'opacity' : 1.0,
             'layer'   : 'below',
@@ -430,14 +454,29 @@ class FigureSpec(BaseFigure):
         self.figure.add_layout_image(image)
 
         # update axes
-        self.xlim = [xmin, xmax]
-        self.ylim = [ymin, ymax]
-        self.zlim = [zmin, zmax]
+        self.xlim = x_range
+
+        if ylog:
+            self.ylim = 10**y_range[0], 10**y_range[1]
+        else:
+            self.ylim = y_range
+
+        if zlog:
+            self.zlim = 10**z_range[0], 10**z_range[1]
+        else:
+            self.zlim = z_range
+
         self.update_axes()
 
         # colorbar
-        zlabel = self.get_opt('zlabel', '')
-        self.set_colorbar(zmin=zmin, zmax=zmax, zlabel=zlabel, zlog=zlog, cmap=cmap)
+        colorbar_opt = {
+            'zlabel' : self.get_opt('zlabel', ''),
+            'zmin'   : self.zlim[0],
+            'zmax'   : self.zlim[1],
+            'zlog'   : zlog,
+            'cmap'   : cmap,
+        }
+        self.set_colorbar(**colorbar_opt)
 
     def set_colorbar(self, zmin, zmax, zlabel, zlog, cmap):
         font = dict(titlefont_size=self.opt['fontsize'],
@@ -451,9 +490,9 @@ class FigureSpec(BaseFigure):
             zmax = np.log10(zmax)
 
         # rasterized colorbar image
-        im_colorbar = get_raster_colorbar(cmap=cmap)
+        img_colorbar = get_raster_colorbar(cmap=cmap)
         image_opt = {
-            'source'  : im_colorbar,
+            'source'  : img_colorbar,
             'xref'    : self.axes_cb['x'],
             'yref'    : self.axes_cb['y'],
             'x'       : 0,

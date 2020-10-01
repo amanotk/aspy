@@ -132,6 +132,10 @@ def is_ipython():
     except:
         return False
 
+def is_jupyter():
+    import sys
+    return 'ipykernel' in sys.modules
+
 
 def cast_xarray(var):
     "cast input (scalar or sequence) into xarray's DataArray"
@@ -342,6 +346,93 @@ def interpolate_spectrogram(ybin, data, **kwargs):
     opt = dict(y0=y0, y1=y1, bine=bine, binc=binc)
 
     return zz, opt
+
+
+def prepare_raster_spectrogram(x, y, z, **kwargs):
+    ylog = kwargs.get('ylog', False)
+    zlog = kwargs.get('zlog', False)
+
+    # asjust array shape
+    zz = z.T
+    Ny, Nx = zz.shape
+
+    if x.ndim == 1:
+        xx = np.tile(x[np.newaxis,:], (Ny, 1))
+    elif x.ndim == 2:
+        xx = x.T
+    else:
+        raise ValueError('invalid shape of x')
+
+    if y.ndim == 1:
+        yy = np.tile(y[:,np.newaxis], (1, Nx))
+    elif y.ndim == 2:
+        yy = y.T
+    else:
+        raise ValueError('invalid shape of y')
+
+    # preprocess
+    if ylog:
+        yy   = np.log10(yy)
+
+    if zlog:
+        zz   = np.log10(zz)
+        zz   = np.where(np.isinf(zz), np.nan, zz)
+
+    # data for rasterization
+    data = xr.DataArray(zz, name='z',
+                        dims=['ydim', 'xdim'],
+                        coords={'y' : (['ydim', 'xdim'], yy),
+                                'x' : (['ydim', 'xdim'], xx)})
+
+    xcoord = np.sort(np.unique(xx))
+    ycoord = np.sort(np.unique(yy))
+    xmin = xcoord[ 0] - 0.5*(xcoord[ 1] - xcoord[ 0])
+    xmax = xcoord[-1] + 0.5*(xcoord[-1] - xcoord[-2])
+    ymin = ycoord[ 0] - 0.5*(ycoord[ 1] - ycoord[ 0])
+    ymax = ycoord[-1] + 0.5*(ycoord[-1] - ycoord[-2])
+    zmin = np.nanmin(zz)
+    zmax = np.nanmax(zz)
+
+    # attach attributes for rasterization
+    data.attrs['ylog'] = ylog
+    data.attrs['zlog'] = zlog
+    data.attrs['xmin'] = xmin
+    data.attrs['xmax'] = xmax
+    data.attrs['ymin'] = ymin
+    data.attrs['ymax'] = ymax
+    data.attrs['zmin'] = zmin
+    data.attrs['zmax'] = zmax
+
+    return data
+
+
+def do_raster_spectrogram(data, **kwargs):
+    from matplotlib import cm
+    shade = datashader.transfer_functions.shade
+
+    width   = kwargs.get('width')
+    height  = kwargs.get('height')
+    x_range = kwargs.get('x_range', [data.attrs['xmin'], data.attrs['xmax']])
+    y_range = kwargs.get('y_range', [data.attrs['ymin'], data.attrs['ymax']])
+    z_range = kwargs.get('z_range', [data.attrs['zmin'], data.attrs['zmax']])
+    cmap = kwargs.get('cmap', 'viridis')
+
+    canvas_opts = {
+        'x_range' : x_range,
+        'y_range' : y_range,
+        'plot_width' : int(width),
+        'plot_height' : int(height),
+    }
+    canvas = datashader.Canvas(**canvas_opts)
+
+    shade_opts = {
+        'how' : 'linear',
+        'cmap' : cm.get_cmap(cmap),
+        'span' : z_range,
+    }
+    image = shade(canvas.quadmesh(data, x='x', y='y'), **shade_opts).to_pil()
+
+    return image
 
 
 def get_ds_raster_spectrogram(x, y, z, **kwargs):

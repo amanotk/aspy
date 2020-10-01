@@ -287,63 +287,89 @@ class FigureSpec(BaseFigure):
         ylog = self.get_opt('ytype', 'linear') == 'log'
         zlog = self.get_opt('ztype', 'linear') == 'log'
 
-        # colormap and range
-        cmap = _get_colormap(self.get_opt('colormap'))
-        zmin, zmax = self.get_opt('zrange', [None, None])
+        # prepare for data to be rasterized
+        kwargs = {
+            'ylog' : ylog,
+            'zlog' : zlog,
+        }
+        self.raster_data = prepare_raster_spectrogram(x, y, z, **kwargs)
 
-        # bounding box in pixels
+        # colormap
+        cmap = _get_colormap(self.get_opt('colormap'))
+
+        # xrange
+        x_range = self.get_opt('trange')
+        if x_range is None:
+            x_range = data.attrs['xmin'], data.attrs['xmax']
+        else:
+            x_range = to_unixtime(x_range)
+
+        # yrange
+        y_range = self.get_opt('yrange')
+        if y_range is None:
+            y_range = data.attrs['ymin'], data.attrs['ymax']
+        if ylog:
+            y_range = np.log10(y_range[0]), np.log10(y_range[1])
+
+        # zrange
+        z_range = self.get_opt('zrange')
+        if z_range is None:
+            z_range = data.attrs['zmin'], data.attrs['zmax']
+        if zlog:
+            z_range = np.log10(z_range[0]), np.log10(z_range[1])
+
+        # bounding box and width/height in pixels
         numaxes = self.opt['numaxes']
         bbox_x0 = self.opt['bbox_pixels']['x0'][numaxes]
         bbox_x1 = self.opt['bbox_pixels']['x1'][numaxes]
         bbox_y0 = self.opt['bbox_pixels']['y0'][numaxes]
         bbox_y1 = self.opt['bbox_pixels']['y1'][numaxes]
+        width   = int(bbox_x1 - bbox_x0)
+        height  = int(bbox_y1 - bbox_y0)
 
-        # rasterized spectrogram
+        # rasterize
         kwargs = {
-            'ylog' : ylog,
-            'zlog' : zlog,
-            'zmin' : zmin,
-            'zmax' : zmax,
-            'cmap' : cmap,
-            'width' : bbox_x1 - bbox_x0,
-            'height' : bbox_y1 - bbox_y0,
+            'x_range' : x_range,
+            'y_range' : y_range,
+            'z_range' : z_range,
+            'cmap'    : cmap,
+            'width'   : width,
+            'height'  : height,
         }
-        im_spectrogram, opt = get_ds_raster_spectrogram(x, y, z, **kwargs)
-        xmin = opt['xmin']
-        xmax = opt['xmax']
-        ymin = opt['ymin']
-        ymax = opt['ymax']
-        zmin = opt['zmin']
-        zmax = opt['zmax']
+        img = do_raster_spectrogram(self.raster_data, **kwargs)
 
         # plot
-        tmin = mpldates.date2num(pd_to_datetime(xmin))[0]
-        tmax = mpldates.date2num(pd_to_datetime(xmax))[0]
-
-        if ylog:
-            extent = [tmin, tmax, np.log10(ymin), np.log10(ymax)]
-        else:
-            extent = [tmin, tmax, ymin, ymax]
+        t_range = mpldates.date2num(pd_to_datetime(x_range))
 
         opt_imshow = {
+            'origin' : 'upper',
             'aspect' : 'auto',
-            'extent' : extent,
+            'extent' : [t_range[0], t_range[1], y_range[0], y_range[1]],
         }
-        im = self.axes_bg.imshow(np.asarray(im_spectrogram), **opt_imshow)
+        self.axes_bg.imshow(np.asarray(img), **opt_imshow)
 
         # update axes
-        self.xlim = [xmin, xmax]
-        self.ylim = [ymin, ymax]
-        self.zlim = [zmin, zmax]
+        self.xlim = x_range
+
+        if ylog:
+            self.ylim = 10**y_range[0], 10**y_range[1]
+        else:
+            self.ylim = y_range
+
+        if zlog:
+            self.zlim = 10**z_range[0], 10**z_range[1]
+        else:
+            self.zlim = z_range
+
         self.update_axes()
 
         # colorbar
-        im_colorbar = get_raster_colorbar(cmap=cmap)
+        img_colorbar = get_raster_colorbar(cmap=cmap)
         opt_imshow = {
             'aspect' : 'auto',
             'extent' : [0, 1, 0, 1],
         }
-        im = self.cbax_bg.imshow(np.asarray(im_colorbar), **opt_imshow)
+        self.cbax_bg.imshow(np.asarray(img_colorbar), **opt_imshow)
 
         self.cbax.set_ylabel(self.get_opt('zlabel', ''),
                              fontsize=self.opt['fontsize'])
