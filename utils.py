@@ -410,8 +410,10 @@ def do_raster_spectrogram(data, **kwargs):
     from matplotlib import cm
     shade = datashader.transfer_functions.shade
 
-    width   = kwargs.get('width')
-    height  = kwargs.get('height')
+    # high resolution rasterization for zooming
+    zoom_ratio = 4
+    width   = kwargs.get('width')  * zoom_ratio
+    height  = kwargs.get('height') * zoom_ratio
     x_range = kwargs.get('x_range', [data.attrs['xmin'], data.attrs['xmax']])
     y_range = kwargs.get('y_range', [data.attrs['ymin'], data.attrs['ymax']])
     z_range = kwargs.get('z_range', [data.attrs['zmin'], data.attrs['zmax']])
@@ -631,6 +633,8 @@ def pd_to_datetime(t):
         tt = pd.to_datetime(tt)
     elif dt == np.float32 or dt == np.float64:
         tt = pd.to_datetime(tt, unit='s')
+    elif dt == np.object and isinstance(tt[0], pd.Timestamp):
+        tt = pd.DatetimeIndex(tt.astype(np.datetime64))
     else:
         raise ValueError('Unrecognized time format : ', dt)
     return tt

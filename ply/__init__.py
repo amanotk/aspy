@@ -126,7 +126,17 @@ def generate_stack(var, **options):
             layout['xaxis%d' % (j+1)] = dict(range=trange)
         figure.update_layout(**layout)
 
+    # install callback for jupyter notebook
+    if isinstance(figure, go.FigureWidget):
+        # FigureWidget does not seem to be compatible with multiple plots!
+        args = list()
+        for j in range(num_plots):
+            args.append(('xaxis%d' % (j+1), 'range'))
+            args.append(('yaxis%d' % (j+1), 'range'))
+        #figure.layout.on_change(callback, *args)
+
     if is_ipython():
         figure.show()
 
     return figure
+

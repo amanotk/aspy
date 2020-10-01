@@ -293,6 +293,7 @@ class FigureSpec(BaseFigure):
             'zlog' : zlog,
         }
         self.raster_data = prepare_raster_spectrogram(x, y, z, **kwargs)
+        data_attrs = self.raster_data.attrs
 
         # colormap
         cmap = _get_colormap(self.get_opt('colormap'))
@@ -300,22 +301,22 @@ class FigureSpec(BaseFigure):
         # xrange
         x_range = self.get_opt('trange')
         if x_range is None:
-            x_range = data.attrs['xmin'], data.attrs['xmax']
+            x_range = data_attrs['xmin'], data_attrs['xmax']
         else:
             x_range = to_unixtime(x_range)
 
         # yrange
         y_range = self.get_opt('yrange')
         if y_range is None:
-            y_range = data.attrs['ymin'], data.attrs['ymax']
-        if ylog:
+            y_range = data_attrs['ymin'], data_attrs['ymax']
+        elif ylog:
             y_range = np.log10(y_range[0]), np.log10(y_range[1])
 
         # zrange
         z_range = self.get_opt('zrange')
         if z_range is None:
-            z_range = data.attrs['zmin'], data.attrs['zmax']
-        if zlog:
+            z_range = data_attrs['zmin'], data_attrs['zmax']
+        elif zlog:
             z_range = np.log10(z_range[0]), np.log10(z_range[1])
 
         # bounding box and width/height in pixels
