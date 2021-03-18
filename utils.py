@@ -627,9 +627,9 @@ def time_slice(var, t1, t2):
 
 
 def pd_to_datetime(t):
-    tt = np.atleast_1d(t)
+    tt = np.atleast_1d(np.array(t))
     dt = tt.dtype
-    if dt.type == np.str_ or dt.type == np.string_:
+    if isinstance(tt[0], str):
         tt = pd.to_datetime(tt)
     elif dt == np.float32 or dt == np.float64:
         tt = pd.to_datetime(tt, unit='s')

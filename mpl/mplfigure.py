@@ -423,8 +423,7 @@ class FigureSpec(BaseFigure):
         tickvals = loc.tick_values(y0, y1)
 
         # background axes
-        tickvals = (ticks - y0)/(y1 - y0)
-        loc_bg = matplotlib.ticker.FixedLocator(ticks)
+        loc_bg = matplotlib.ticker.FixedLocator(tickvals)
         fmt_bg = matplotlib.ticker.NullFormatter()
         self.axes_bg.yaxis.set_major_locator(loc_bg)
         self.axes_bg.yaxis.set_major_formatter(fmt_bg)
